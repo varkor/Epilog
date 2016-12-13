@@ -8,21 +8,21 @@ void usage(const char command[]) {
 }
 
 int main(int argc, char *argv[]) {
-	Parser::EpilogParser<int> parser;
-	std::unique_ptr<AST::Expression<int>> root = 0;
-	
 	if (argc < 2) {
 		usage(argv[0]);
 		
 		return EXIT_FAILURE;
 	} else {
+		Parser::EpilogParser<int> parser;
+		Interpreter::Context context;
+		std::unique_ptr<AST::Clauses> root = 0;
 		pegmatite::AsciiFileInput input(open(argv[1], O_RDONLY));
-		if (parser.parse(input, parser.grammar.expression, parser.grammar.ignored, pegmatite::defaultErrorReporter, root)) {
-			int value = root->evaluate();
-			std::cout << value << std::endl;
-			
+		if (parser.parse(input, parser.grammar.clauses, parser.grammar.ignored, pegmatite::defaultErrorReporter, root)) {
+			root->interpret(context);
+			std::cerr << "Success!" << std::endl;
 			return EXIT_SUCCESS;
 		} else {
+			std::cerr << "Failure!" << std::endl;
 			return EXIT_FAILURE;
 		}
 	}

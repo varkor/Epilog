@@ -1,8 +1,9 @@
+#include <functional>
+#include <iostream>
+#include <unordered_set>
 #include "../lib/Pegmatite/ast.hh"
 #include "runtime.hh"
 #include "interpreter.hh"
-#include <unordered_set>
-#include <functional>
 
 namespace Compiler {
 	class Context;
@@ -19,28 +20,32 @@ namespace AST {
 	using pegmatite::ErrorReporter;
 	
 	// Abstract superclass for all statements.
-	class Statement: public pegmatite::ASTContainer {
+	class Clause: public pegmatite::ASTContainer {
 		public:
-		virtual void interpret(Interpreter::Context& content) = 0;
+		virtual void interpret(Interpreter::Context& context) = 0;
+	};
+	
+	class Clauses: public pegmatite::ASTContainer {
+		pegmatite::ASTList<Clause> clauses;
+		public:
+		virtual void interpret(Interpreter::Context& context);
 	};
 	
 	// Abstract superclass for all expressions (statements that evaluate to a value).
-	template<typename T>
-	class Expression: public pegmatite::ASTContainer {
+	class Expression: public Clause {
 		public:
-		void interpret(Interpreter::Context& content) {
-			std::cerr << "Cannot interpret any expressions yet." << std::endl;
+		void interpret(Interpreter::Context& context) {
+			std::cout << evaluate() << std::endl;
 		}
-		virtual T evaluate() const = 0;
+		virtual int64_t evaluate() const = 0;
 	};
 	
 	// Number literal.
-	template<typename T>
-	class Number: public Expression<T> {
-		T value;
+	class Number: public Expression {
+		int64_t value;
 		
 		public:
-		T evaluate() const override {
+		int64_t evaluate() const override {
 			return value;
 		}
 		
@@ -51,12 +56,12 @@ namespace AST {
 	};
 	
 	// Abstract superclass for binary operators.
-	template<typename T, class Operator>
-	class BinaryOperator: public Expression<T> {
-		ASTPtr<Expression<T>> left, right;
+	template<class Operator>
+	class BinaryOperator: public Expression {
+		ASTPtr<Expression> left, right;
 		
 		public:
-		T evaluate() const override {
+		int64_t evaluate() const override {
 			Operator op;
 			return op(left->evaluate(), right->evaluate());
 		}

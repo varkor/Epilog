@@ -35,7 +35,13 @@ namespace Parser {
 		Rule multiply = value >> '*' >> value;
 		
 		// Expression: multiplication or number.
-		Rule expression = multiply | number;
+		Rule expression = multiply | value;
+		
+		// Clause.
+		Rule clause = expression >> '.';
+		
+		// Clauses: a standard Epilog program is made up of a series of clauses.
+		Rule clauses = *clause;
 		
 		// Singleton getter.
 		static const EpilogGrammar& get() {
