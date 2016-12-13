@@ -1,0 +1,5 @@
+namespace Interpreter {
+	class Context {
+		
+	};
+}

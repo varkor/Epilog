@@ -6,5 +6,5 @@ A toy Prolog compiler
 brew install llvm
 cmake -H. -Bbuild -DLLVM_CONFIG:FILEPATH=/usr/local/Cellar/llvm/3.9.0/bin/llvm-config
 make -C build
-./bin/epilog -f examples/hello.el
+./bin/epilog examples/hello.el
 ```
