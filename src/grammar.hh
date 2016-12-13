@@ -15,6 +15,13 @@ namespace Parser {
 		// Whitespace: spaces, tabs and newline characters.
 		Rule whitespace = ' '_E | '\t' | nl('\n');
 		
+		// Comments: line and block.
+		Rule comment =
+			("/*"_E >> *(!ExprPtr("*/") >> (nl('\n') | any())) >> "*/") | // Block comment.
+			"%"_E >> *(!ExprPtr("\n") >> any()) >> nl('\n'); // Line comment.
+		
+		Rule ignored = *(comment | whitespace);
+		
 		// Digits: 0 to 9 inclusive.
 		ExprPtr digit = '0'_E - '9';
 		
