@@ -25,6 +25,16 @@ namespace Parser {
 		// Digits: 0 to 9 inclusive.
 		ExprPtr digit = '0'_E - '9';
 		
+		// Letters: a to z and A to Z.
+		ExprPtr lowercase = 'a'_E - 'z';
+		
+		ExprPtr uppercase = 'A'_E - 'Z';
+		
+		ExprPtr letter = lowercase | uppercase;
+		
+		// Characters: digits, letters and underscores.
+		ExprPtr character = letter | digit | '_';
+		
 		// Numbers: sequences of one or more digits.
 		Rule number = +digit;
 		
@@ -37,8 +47,28 @@ namespace Parser {
 		// Expression: multiplication or number.
 		Rule expression = multiply | value;
 		
-		// Clause.
-		Rule clause = expression >> '.';
+		// Identifiers: names (for example, for atoms or rules).
+		Rule identifier = lowercase >> *character;
+		
+		// Variable.
+		Rule variable = (uppercase | '_') >> *character;
+		
+		// Parameters: a comma-separated list of values or variables.
+		Rule parameter = identifier;
+		
+		Rule parameters = -("(" >> -(parameter >> *(',' >> parameter)) >> ")");
+		
+		// Structure: a name optionally followed by an argument list.
+		// A set of empty brackets `()` is equivalent to having no brackets at all.
+		Rule structure = identifier >> parameters;
+		
+		// Rule.
+		Rule rule = structure >> ":-" >> structure;
+		
+		// Clause: either a base clause, or a rule.
+		Rule baseClause = structure;
+		
+		Rule clause = (baseClause | rule) >> '.';
 		
 		// Clauses: a standard Epilog program is made up of a series of clauses.
 		Rule clauses = *clause;

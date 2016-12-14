@@ -25,10 +25,27 @@ namespace AST {
 		virtual void interpret(Interpreter::Context& context) = 0;
 	};
 	
+	// A collection of clauses.
 	class Clauses: public pegmatite::ASTContainer {
 		pegmatite::ASTList<Clause> clauses;
 		public:
 		virtual void interpret(Interpreter::Context& context);
+	};
+	
+	class Identifier: public pegmatite::ASTString { };
+	
+	class ParameterList: public pegmatite::ASTContainer {
+		public:
+		pegmatite::ASTList<Identifier> parameters;
+	};
+	
+	class BaseClause: public Clause {
+		pegmatite::ASTChild<Identifier> name;
+		// As `fact.` is treated equivalently to `fact().`, both will simply have empty parameter lists.
+		pegmatite::ASTPtr<ParameterList> parameterList;
+		
+		public:
+		void interpret(Interpreter::Context& context) override;
 	};
 	
 	// Abstract superclass for all expressions (statements that evaluate to a value).
