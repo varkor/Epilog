@@ -19,7 +19,7 @@ namespace AST {
 	using pegmatite::ASTList;
 	using pegmatite::ErrorReporter;
 	
-	// Abstract superclass for all statements.
+	// Abstract superclass for all clauses.
 	class Clause: public pegmatite::ASTContainer {
 		public:
 		virtual void interpret(Interpreter::Context& context) = 0;
@@ -34,9 +34,49 @@ namespace AST {
 	
 	class Identifier: public pegmatite::ASTString { };
 	
+	class VariableIdentifier: public pegmatite::ASTString { };
+	
+	class Value: public pegmatite::ASTContainer {
+		public:
+		virtual std::string getName() const = 0;
+	};
+	
+	class Atom: public Value {
+		pegmatite::ASTChild<Identifier> name;
+		
+		public:
+		std::string getName() const override {
+			return name;
+		}
+	};
+	
+	class Variable: public Value {
+		pegmatite::ASTChild<VariableIdentifier> name;
+		
+		public:
+		std::string getName() const override {
+			return name;
+		}
+	};
+	
+	// Number literal.
+	class Number: public Value {
+		int64_t value;
+		
+		public:
+		std::string getName() const override {
+			return std::to_string(value);
+		}
+		
+		bool construct(const pegmatite::InputRange &range, pegmatite::ASTStack &stack, const ErrorReporter&) override {
+			pegmatite::constructValue(range, value);
+			return true;
+		}
+	};
+	
 	class ParameterList: public pegmatite::ASTContainer {
 		public:
-		pegmatite::ASTList<Identifier> parameters;
+		pegmatite::ASTList<Value> parameters;
 	};
 	
 	class BaseClause: public Clause {
@@ -48,39 +88,16 @@ namespace AST {
 		void interpret(Interpreter::Context& context) override;
 	};
 	
-	// Abstract superclass for all expressions (statements that evaluate to a value).
-	class Expression: public Clause {
-		public:
-		void interpret(Interpreter::Context& context) {
-			std::cout << evaluate() << std::endl;
-		}
-		virtual int64_t evaluate() const = 0;
-	};
-	
-	// Number literal.
-	class Number: public Expression {
-		int64_t value;
+	class Rule: public Clause {
+		pegmatite::ASTChild<Identifier> name;
+		// As `fact.` is treated equivalently to `fact().`, both will simply have empty parameter lists.
+		pegmatite::ASTPtr<ParameterList> parameterList;
+		
+		// Required now for the parsing to succeed, though this will be generalised in the future.
+		pegmatite::ASTChild<Identifier> conditionName;
+		pegmatite::ASTPtr<ParameterList> conditionParameterList;
 		
 		public:
-		int64_t evaluate() const override {
-			return value;
-		}
-		
-		bool construct(const pegmatite::InputRange &range, pegmatite::ASTStack &stack, const ErrorReporter&) override {
-			pegmatite::constructValue(range, value);
-			return true;
-		}
-	};
-	
-	// Abstract superclass for binary operators.
-	template<class Operator>
-	class BinaryOperator: public Expression {
-		ASTPtr<Expression> left, right;
-		
-		public:
-		int64_t evaluate() const override {
-			Operator op;
-			return op(left->evaluate(), right->evaluate());
-		}
+		void interpret(Interpreter::Context& context) override;
 	};
 }

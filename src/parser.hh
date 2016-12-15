@@ -6,10 +6,13 @@ namespace Parser {
 	class EpilogParser: public pegmatite::ASTParserDelegate {
 		BindAST<AST::Clauses> clauses = EpilogGrammar::get().clauses;
 		BindAST<AST::Identifier> identifier = EpilogGrammar::get().identifier;
+		BindAST<AST::VariableIdentifier> variableIdentifier = EpilogGrammar::get().variableIdentifier;
+		BindAST<AST::Atom> atom = EpilogGrammar::get().atom;
+		BindAST<AST::Variable> variable = EpilogGrammar::get().variable;
+		BindAST<AST::Number> number = EpilogGrammar::get().number;
 		BindAST<AST::ParameterList> parameterList = EpilogGrammar::get().parameters;
 		BindAST<AST::BaseClause> baseClause = EpilogGrammar::get().baseClause;
-		BindAST<AST::Number> number = EpilogGrammar::get().number;
-		BindAST<AST::BinaryOperator<std::multiplies<int>>> multiply = EpilogGrammar::get().multiply;
+		BindAST<AST::Rule> rule = EpilogGrammar::get().rule;
 		public:
 		const EpilogGrammar& grammar = EpilogGrammar::get();
 	};

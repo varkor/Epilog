@@ -38,23 +38,22 @@ namespace Parser {
 		// Numbers: sequences of one or more digits.
 		Rule number = +digit;
 		
-		// Value: a number or a bracketed expression.
-		Rule value = number | '(' >> expression >> ')';
-		
-		// Multiplication: number * number.
-		Rule multiply = value >> '*' >> value;
-		
-		// Expression: multiplication or number.
-		Rule expression = multiply | value;
-		
 		// Identifiers: names (for example, for atoms or rules).
-		Rule identifier = lowercase >> *character;
+		Rule identifier = term(lowercase >> *character);
+		
+		Rule variableIdentifier = term((uppercase | '_') >> *character);
+		
+		// Atom: just a standalone identifier.
+		Rule atom = identifier;
 		
 		// Variable.
-		Rule variable = (uppercase | '_') >> *character;
+		Rule variable = variableIdentifier;
+		
+		// Value.
+		Rule value = atom | variable | number;
 		
 		// Parameters: a comma-separated list of values or variables.
-		Rule parameter = identifier;
+		Rule parameter = value;
 		
 		Rule parameters = -("(" >> -(parameter >> *(',' >> parameter)) >> ")");
 		
@@ -68,7 +67,7 @@ namespace Parser {
 		// Clause: either a base clause, or a rule.
 		Rule baseClause = structure;
 		
-		Rule clause = (baseClause | rule) >> '.';
+		Rule clause = (rule | baseClause) >> '.';
 		
 		// Clauses: a standard Epilog program is made up of a series of clauses.
 		Rule clauses = *clause;
