@@ -38,34 +38,31 @@ namespace Parser {
 		// Numbers: sequences of one or more digits.
 		Rule number = +digit;
 		
-		// Identifiers: names (for example, for atoms or rules).
+		// Identifiers: names (for example, for facts or rules).
 		Rule identifier = pegmatite::term(lowercase >> *character);
 		
 		Rule variableIdentifier = pegmatite::term((uppercase | '_') >> *character);
-		
-		// Atom: just a standalone identifier.
-		Rule atom = identifier;
 		
 		// Variable.
 		Rule variable = variableIdentifier;
 		
 		// Term.
-		Rule term = fact | atom | variable | number;
+		Rule term = compoundTerm | variable | number;
 		
 		// Parameters: a comma-separated list of terms.
 		Rule parameter = term;
 		
 		Rule parameters = -("(" >> -(parameter >> *(',' >> parameter)) >> ")");
 		
-		// Structure: a name optionally followed by an argument list.
+		// Compound term: a name optionally followed by an argument list.
 		// A set of empty brackets `()` is equivalent to having no brackets at all.
-		Rule structure = identifier >> parameters;
+		Rule compoundTerm = identifier >> parameters;
 		
 		// Rule.
-		Rule rule = structure >> ":-" >> structure;
+		Rule rule = compoundTerm >> ":-" >> compoundTerm;
 		
 		// Clause: either a fact, or a rule.
-		Rule fact = structure;
+		Rule fact = compoundTerm;
 		
 		Rule clause = (rule | fact) >> '.';
 		

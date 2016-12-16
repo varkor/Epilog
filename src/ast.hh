@@ -34,22 +34,27 @@ namespace AST {
 		pegmatite::ASTList<Term> parameters;
 	};
 	
-	class Clause: public Term {
-		protected:
+	class CompoundTerm: public Term {
+		public:
 		pegmatite::ASTChild<Identifier> name;
 		// As `fact.` is treated equivalently to `fact().`, both will simply have empty parameter lists.
 		pegmatite::ASTPtr<ParameterList> parameterList;
 		
-		public:
 		std::string toString() const override {
-			std::stringstream parameters;
+			std::string parameters;
 			bool first = true;
 			for (auto& parameter : (*parameterList).parameters) {
-				parameters << (!first ? "," : (first = false, "")) << parameter->toString();
+				parameters += (!first ? "," : (first = false, "")) + parameter->toString();
 			}
-			return name + "/" + std::to_string((*parameterList).parameters.size()) + "(" + parameters.str() + ")";
+			return name + "/" + std::to_string((*parameterList).parameters.size()) + "(" + parameters + ")";
 		}
+	};
+	
+	class Clause: public pegmatite::ASTContainer {
+		protected:
+		pegmatite::ASTPtr<CompoundTerm> head;
 		
+		public:
 		virtual void interpret(Interpreter::Context& context) = 0;
 	};
 	
@@ -58,15 +63,6 @@ namespace AST {
 		pegmatite::ASTList<Clause> clauses;
 		public:
 		virtual void interpret(Interpreter::Context& context);
-	};
-	
-	class Atom: public Term {
-		pegmatite::ASTChild<Identifier> name;
-		
-		public:
-		std::string toString() const override {
-			return name;
-		}
 	};
 	
 	class Variable: public Term {
@@ -100,8 +96,7 @@ namespace AST {
 	
 	class Rule: public Clause {
 		// Required now for the parsing to succeed, though this will be generalised in the future.
-		pegmatite::ASTChild<Identifier> conditionName;
-		pegmatite::ASTPtr<ParameterList> conditionParameterList;
+		pegmatite::ASTPtr<CompoundTerm> body;
 		
 		public:
 		void interpret(Interpreter::Context& context) override;
