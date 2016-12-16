@@ -4,9 +4,9 @@
 #include "runtime.hh"
 
 namespace Epilog {
-	static std::unordered_map<std::string, struct BaseClause*> clauseTable;
+	static std::unordered_map<std::string, struct Clause*> clauseTable;
 	
-	void registerClause(const std::string& name, struct BaseClause* clause) {
+	void registerClause(const std::string& name, struct Clause* clause) {
 		clauseTable[name] = clause;
 	}
 }

@@ -39,9 +39,9 @@ namespace Parser {
 		Rule number = +digit;
 		
 		// Identifiers: names (for example, for atoms or rules).
-		Rule identifier = term(lowercase >> *character);
+		Rule identifier = pegmatite::term(lowercase >> *character);
 		
-		Rule variableIdentifier = term((uppercase | '_') >> *character);
+		Rule variableIdentifier = pegmatite::term((uppercase | '_') >> *character);
 		
 		// Atom: just a standalone identifier.
 		Rule atom = identifier;
@@ -49,11 +49,11 @@ namespace Parser {
 		// Variable.
 		Rule variable = variableIdentifier;
 		
-		// Value.
-		Rule value = atom | variable | number;
+		// Term.
+		Rule term = fact | atom | variable | number;
 		
-		// Parameters: a comma-separated list of values or variables.
-		Rule parameter = value;
+		// Parameters: a comma-separated list of terms.
+		Rule parameter = term;
 		
 		Rule parameters = -("(" >> -(parameter >> *(',' >> parameter)) >> ")");
 		
@@ -64,10 +64,10 @@ namespace Parser {
 		// Rule.
 		Rule rule = structure >> ":-" >> structure;
 		
-		// Clause: either a base clause, or a rule.
-		Rule baseClause = structure;
+		// Clause: either a fact, or a rule.
+		Rule fact = structure;
 		
-		Rule clause = (rule | baseClause) >> '.';
+		Rule clause = (rule | fact) >> '.';
 		
 		// Clauses: a standard Epilog program is made up of a series of clauses.
 		Rule clauses = *clause;

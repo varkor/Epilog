@@ -8,29 +8,19 @@ namespace AST {
 		}
 	}
 	
-	void BaseClause::interpret(Interpreter::Context& context) {
-		Epilog::BaseClause* baseClause = new Epilog::BaseClause();
-		std::stringstream parameters;
-		bool first = true;
-		for (auto& parameter : (*parameterList).parameters) {
-			parameters << (!first ? "," : (first = false, "")) << parameter->getName();
-		}
-		std::cerr << "Register base clause: " << name << "/" + std::to_string((*parameterList).parameters.size()) + "(" << parameters.str() << ")" << std::endl;
+	void Fact::interpret(Interpreter::Context& context) {
+		Epilog::Fact* fact = new Epilog::Fact();
+		std::cerr << "Register base clause: " << toString() << std::endl;
 		std::string& clauseName = name;
-		baseClause->name = strdup(clauseName.c_str());
-		Epilog::registerClause(clauseName, baseClause);
+		fact->name = strdup(clauseName.c_str());
+		Epilog::registerClause(clauseName, fact);
 	}
 	
 	void Rule::interpret(Interpreter::Context& context) {
-		Epilog::BaseClause* baseClause = new Epilog::BaseClause();
-		std::stringstream parameters;
-		bool first = true;
-		for (auto& parameter : (*parameterList).parameters) {
-			parameters << (!first ? "," : (first = false, "")) << parameter->getName();
-		}
-		std::cerr << "Register rule: " << name << "/" + std::to_string((*parameterList).parameters.size()) + "(" << parameters.str() << ")" << std::endl;
+		Epilog::Rule* rule = new Epilog::Rule();
+		std::cerr << "Register rule: " << toString() << std::endl;
 		std::string& clauseName = name;
-		baseClause->name = strdup(clauseName.c_str());
-		Epilog::registerClause(clauseName, baseClause);
+		rule->name = strdup(clauseName.c_str());
+		Epilog::registerClause(clauseName, rule);
 	}
 }

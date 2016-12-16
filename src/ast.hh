@@ -19,9 +19,37 @@ namespace AST {
 	using pegmatite::ASTList;
 	using pegmatite::ErrorReporter;
 	
-	// Abstract superclass for all clauses.
-	class Clause: public pegmatite::ASTContainer {
+	// Abstract superclass for all terms.
+	class Term: public pegmatite::ASTContainer {
 		public:
+		virtual std::string toString() const = 0;
+	};
+	
+	class Identifier: public pegmatite::ASTString { };
+	
+	class VariableIdentifier: public pegmatite::ASTString { };
+	
+	class ParameterList: public pegmatite::ASTContainer {
+		public:
+		pegmatite::ASTList<Term> parameters;
+	};
+	
+	class Clause: public Term {
+		protected:
+		pegmatite::ASTChild<Identifier> name;
+		// As `fact.` is treated equivalently to `fact().`, both will simply have empty parameter lists.
+		pegmatite::ASTPtr<ParameterList> parameterList;
+		
+		public:
+		std::string toString() const override {
+			std::stringstream parameters;
+			bool first = true;
+			for (auto& parameter : (*parameterList).parameters) {
+				parameters << (!first ? "," : (first = false, "")) << parameter->toString();
+			}
+			return name + "/" + std::to_string((*parameterList).parameters.size()) + "(" + parameters.str() + ")";
+		}
+		
 		virtual void interpret(Interpreter::Context& context) = 0;
 	};
 	
@@ -32,39 +60,30 @@ namespace AST {
 		virtual void interpret(Interpreter::Context& context);
 	};
 	
-	class Identifier: public pegmatite::ASTString { };
-	
-	class VariableIdentifier: public pegmatite::ASTString { };
-	
-	class Value: public pegmatite::ASTContainer {
-		public:
-		virtual std::string getName() const = 0;
-	};
-	
-	class Atom: public Value {
+	class Atom: public Term {
 		pegmatite::ASTChild<Identifier> name;
 		
 		public:
-		std::string getName() const override {
+		std::string toString() const override {
 			return name;
 		}
 	};
 	
-	class Variable: public Value {
+	class Variable: public Term {
 		pegmatite::ASTChild<VariableIdentifier> name;
 		
 		public:
-		std::string getName() const override {
+		std::string toString() const override {
 			return name;
 		}
 	};
 	
 	// Number literal.
-	class Number: public Value {
+	class Number: public Term {
 		int64_t value;
 		
 		public:
-		std::string getName() const override {
+		std::string toString() const override {
 			return std::to_string(value);
 		}
 		
@@ -74,25 +93,12 @@ namespace AST {
 		}
 	};
 	
-	class ParameterList: public pegmatite::ASTContainer {
-		public:
-		pegmatite::ASTList<Value> parameters;
-	};
-	
-	class BaseClause: public Clause {
-		pegmatite::ASTChild<Identifier> name;
-		// As `fact.` is treated equivalently to `fact().`, both will simply have empty parameter lists.
-		pegmatite::ASTPtr<ParameterList> parameterList;
-		
+	class Fact: public Clause {
 		public:
 		void interpret(Interpreter::Context& context) override;
 	};
 	
 	class Rule: public Clause {
-		pegmatite::ASTChild<Identifier> name;
-		// As `fact.` is treated equivalently to `fact().`, both will simply have empty parameter lists.
-		pegmatite::ASTPtr<ParameterList> parameterList;
-		
 		// Required now for the parsing to succeed, though this will be generalised in the future.
 		pegmatite::ASTChild<Identifier> conditionName;
 		pegmatite::ASTPtr<ParameterList> conditionParameterList;
