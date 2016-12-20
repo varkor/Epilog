@@ -13,6 +13,7 @@ namespace Parser {
 		BindAST<AST::ParameterList> parameterList = EpilogGrammar::get().parameters;
 		BindAST<AST::Fact> fact = EpilogGrammar::get().fact;
 		BindAST<AST::Rule> rule = EpilogGrammar::get().rule;
+		BindAST<AST::Query> query = EpilogGrammar::get().query;
 		public:
 		const EpilogGrammar& grammar = EpilogGrammar::get();
 	};

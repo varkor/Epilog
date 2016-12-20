@@ -4,7 +4,7 @@ fact.
 another().
 unary(One).
 ternary(one, two, three).
-% A compound base clause
+% A compound fact
 top(middle(bottom, bottom), bottom).
 % A simple rule
 rule(one, Two, 3) :- fact(Two).

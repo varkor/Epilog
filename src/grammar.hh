@@ -61,10 +61,13 @@ namespace Parser {
 		// Rule.
 		Rule rule = compoundTerm >> ":-" >> compoundTerm;
 		
-		// Clause: either a fact, or a rule.
+		// Clause: either a fact, a rule, or a query.
 		Rule fact = compoundTerm;
 		
-		Rule clause = (rule | fact) >> '.';
+		// Query: a way by which we can invoke unification of rules without an interactive mode.
+		Rule query = "?-"_E >> compoundTerm;
+		
+		Rule clause = (query | rule | fact) >> '.';
 		
 		// Clauses: a standard Epilog program is made up of a series of clauses.
 		Rule clauses = *clause;

@@ -43,10 +43,10 @@ namespace AST {
 		std::string toString() const override {
 			std::string parameters;
 			bool first = true;
-			for (auto& parameter : (*parameterList).parameters) {
+			for (auto& parameter : parameterList->parameters) {
 				parameters += (!first ? "," : (first = false, "")) + parameter->toString();
 			}
-			return name + "/" + std::to_string((*parameterList).parameters.size()) + "(" + parameters + ")";
+			return name + "/" + std::to_string(parameterList->parameters.size()) + "(" + parameters + ")";
 		}
 	};
 	
@@ -98,6 +98,11 @@ namespace AST {
 		// Required now for the parsing to succeed, though this will be generalised in the future.
 		pegmatite::ASTPtr<CompoundTerm> body;
 		
+		public:
+		void interpret(Interpreter::Context& context) override;
+	};
+	
+	class Query: public Clause {
 		public:
 		void interpret(Interpreter::Context& context) override;
 	};
