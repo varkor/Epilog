@@ -22,7 +22,8 @@ int main(int argc, char *argv[]) {
 		if (parser.parse(input, parser.grammar.clauses, parser.grammar.ignored, pegmatite::defaultErrorReporter, root)) {
 			try {
 				root->interpret(context);
-			} catch (const Epilog::RuntimeException&) {
+			} catch (const Epilog::RuntimeException& exception) {
+				exception.print();
 				return EXIT_FAILURE;
 			}
 			return EXIT_SUCCESS;

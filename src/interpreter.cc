@@ -40,7 +40,7 @@ namespace AST {
 			Term* term = node->term;
 			reg = nextRegister;
 			if (CompoundTerm* compoundTerm = dynamic_cast<CompoundTerm*>(term)) {
-				node->name = compoundTerm->name + "/" + std::to_string(compoundTerm->parameterList->parameters.size());
+				node->name = compoundTerm->name;
 				for (auto& parameter : compoundTerm->parameterList->parameters) {
 					terms.push(termPair(new TermNode(parameter.get()), node));
 				}
@@ -56,7 +56,7 @@ namespace AST {
 			} else if (Number* number = dynamic_cast<Number*>(term)) {
 				node->name = number->toString();
 			} else {
-				throw Epilog::RuntimeException("Found a term of an unknown type in the query.");
+				throw Epilog::RuntimeException("Found a term of an unknown type in the query.", __FILENAME__, __func__, __LINE__);
 			}
 			node->reg = reg;
 			if (parent != nullptr) {
@@ -64,7 +64,7 @@ namespace AST {
 			}
 			// If the node was assigned a new register, and wasn't a pre-existing variable
 			if (reg == nextRegister) {
-				std::cerr << (node->reg + 1) << " = " << node->name << std::endl;
+//				std::cerr << (node->reg + 1) << " = " << node->name << std::endl;
 				registers.push_back(node);
 				++ nextRegister;
 			} else {
@@ -83,6 +83,37 @@ namespace AST {
 	
 	void Fact::interpret(Interpreter::Context& context) {
 		std::cerr << "Register fact: " << head->toString() << std::endl;
+		auto pair = buildAllocationTree(head.get());
+		std::vector<TermNode*> registers = pair.second;
+		
+		// Use the runtime instructions to build this structure on the heap
+		while (Epilog::Runtime::registers.size() < registers.size()) {
+			Epilog::Runtime::registers.push_back(nullptr);
+		}
+		std::unordered_set<int> instructions;
+		for (TermNode* node : registers) {
+			if (dynamic_cast<CompoundTerm*>(node->term)) {
+				std::cerr << "get_structure " << node->name << ", x" << (node->reg) << std::endl;
+				Epilog::unifyStructure(Epilog::HeapFunctor(node->name, node->children.size()), Epilog::Runtime::registers[node->reg]);
+				instructions.insert(node->reg);
+				for (TermNode* child : node->children) {
+					if (instructions.find(child->reg) == instructions.end()) {
+						std::cerr << "unify_variable x" << child->reg << std::endl;
+						Epilog::unifyVariable(Epilog::Runtime::registers[child->reg]);
+						instructions.insert(child->reg);
+					} else {
+						std::cerr << "unify_value x" << child->reg << std::endl;
+						Epilog::unifyValue(Epilog::Runtime::registers[child->reg]);
+					}
+				}
+			}
+		}
+		
+		// Free the memory associated with each node
+		for (TermNode* node : registers) {
+			delete node;
+		}
+		// Use the runtime commands now to build this structure on the heap, and set a register value to point to its address
 	}
 	
 	void Rule::interpret(Interpreter::Context& context) {
@@ -97,26 +128,38 @@ namespace AST {
 		// Depth-first search through the query to perform a topological ordering
 		std::vector<TermNode*> allocations;
 		topologicalSort(allocations, root);
+		
+		// Use the runtime instructions to build this structure on the heap
+		while (Epilog::Runtime::registers.size() < registers.size()) {
+			Epilog::Runtime::registers.push_back(nullptr);
+		}
 		std::unordered_set<int> instructions;
-		// Print out the ordering to make sure we have it right
 		for (TermNode* node : allocations) {
 			if (dynamic_cast<CompoundTerm*>(node->term)) {
-				std::cerr << "put_structure " << node->name << ", X" << (node->reg + 1) << std::endl;
+				std::cerr << "put_structure " << node->name << ", x" << node->reg << std::endl;
+				Epilog::pushCompoundTerm(Epilog::HeapFunctor(node->name, node->children.size()), Epilog::Runtime::registers[node->reg]);
 				instructions.insert(node->reg);
 				for (TermNode* child : node->children) {
 					if (instructions.find(child->reg) == instructions.end()) {
-						std::cerr << "set_variable X" << (child->reg + 1) << std::endl;
+						std::cerr << "set_variable x" << child->reg << std::endl;
+						Epilog::pushVariable(Epilog::Runtime::registers[child->reg]);
 						instructions.insert(child->reg);
 					} else {
-						std::cerr << "set_value X" << (child->reg + 1) << std::endl;
+						std::cerr << "set_value x" << child->reg << std::endl;
+						Epilog::pushValue(Epilog::Runtime::registers[child->reg]);
 					}
 				}
 			}
 		}
+		
+		std::cerr << "Stack (" << Epilog::Runtime::stack.size() << "):" << std::endl;
+		Epilog::Runtime::stack.print();
+		std::cerr << "Registers (" << Epilog::Runtime::registers.size() << "):" << std::endl;
+		Epilog::Runtime::registers.print();
+		
 		// Free the memory associated with each node
 		for (TermNode* node : registers) {
 			delete node;
 		}
-		// Use the runtime commands now to build this structure on the heap, and set a register value to point to its address
 	}
 }
