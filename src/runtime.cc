@@ -7,22 +7,24 @@
 namespace Epilog {
 	StackHeap Runtime::stack;
 	StackHeap Runtime::registers;
+	BoundsCheckedVector<Instruction> Runtime::instructions;
 	Mode Runtime::mode;
+	BoundsCheckedVector<Instruction>::size_type Runtime::nextInstruction;
 	HeapContainer::heapIndex Runtime::S;
 	
-	void pushCompoundTerm(const HeapFunctor& functor, std::unique_ptr<HeapContainer>& reg) {
+	void PushCompoundTermInstruction::execute() {
 		HeapTuple header(HeapTuple::Type::compoundTerm, Runtime::stack.size() + 1);
 		Runtime::stack.push_back(header.copy());
 		Runtime::stack.push_back(functor.copy());
 		reg = header.copy();
 	}
 	
-	void pushVariable(std::unique_ptr<HeapContainer>& reg) {
+	void PushVariableInstruction::execute() {
 		Runtime::stack.push_back(std::unique_ptr<HeapTuple>(new HeapTuple(HeapTuple::Type::reference, Runtime::stack.size())));
 		reg = std::unique_ptr<HeapTuple>(new HeapTuple(HeapTuple::Type::reference, Runtime::stack.size()));
 	}
 	
-	void pushValue(std::unique_ptr<HeapContainer>& reg) {
+	void PushValueInstruction::execute() {
 		Runtime::stack.push_back(reg->copy());
 	}
 	
@@ -78,7 +80,7 @@ namespace Epilog {
 									pushdownList.push(v2 + i);
 								}
 							} else {
-								throw RuntimeException("Tried to unify two values that cannot unify.", __FILENAME__, __func__, __LINE__);
+								throw UnificationError("Tried to unify two values that cannot unify.", __FILENAME__, __func__, __LINE__);
 							}
 						} else {
 							throw RuntimeException("Tried to dereference a non-functor address on the stack as a functor.", __FILENAME__, __func__, __LINE__);
@@ -91,7 +93,7 @@ namespace Epilog {
 		}
 	}
 	
-	void unifyStructure(const HeapFunctor& functor, std::unique_ptr<HeapContainer>& reg) {
+	void UnifyCompoundTermInstruction::execute() {
 		HeapContainer::heapIndex address = dereference(reg);
 		if (HeapTuple* value = dynamic_cast<HeapTuple*>((address != -1UL ? Runtime::stack[address] : reg).get())) {
 			HeapTuple::Type type = value->type;
@@ -111,7 +113,7 @@ namespace Epilog {
 							Runtime::S = reference + 1;
 							Runtime::mode = Mode::read;
 						} else {
-							throw RuntimeException("Tried to unify two functors that cannot unify.", __FILENAME__, __func__, __LINE__);
+							throw UnificationError("Tried to unify two functors that cannot unify.", __FILENAME__, __func__, __LINE__);
 						}
 					} else {
 						throw RuntimeException("Tried to dereference a non-functor address on the stack as a functor.", __FILENAME__, __func__, __LINE__);
@@ -124,25 +126,26 @@ namespace Epilog {
 		}
 	}
 	
-	void unifyVariable(std::unique_ptr<HeapContainer>& reg) {
+	void UnifyVariableInstruction::execute() {
 		switch (Runtime::mode) {
 			case Mode::read:
 				reg = Runtime::stack[Runtime::S]->copy();
 				break;
 			case Mode::write:
-				pushVariable(reg);
+				Runtime::stack.push_back(std::unique_ptr<HeapTuple>(new HeapTuple(HeapTuple::Type::reference, Runtime::stack.size())));
+				reg = std::unique_ptr<HeapTuple>(new HeapTuple(HeapTuple::Type::reference, Runtime::stack.size()));
 				break;
 		}
 		++ Runtime::S;
 	}
 	
-	void unifyValue(std::unique_ptr<HeapContainer>& reg) {
+	void UnifyValueInstruction::execute() {
 		switch (Runtime::mode) {
 			case Mode::read:
 				unify(reg, Runtime::S);
 				break;
 			case Mode::write:
-				pushValue(reg);
+				Runtime::stack.push_back(reg->copy());
 				break;
 		}
 		++ Runtime::S;

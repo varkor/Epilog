@@ -4,6 +4,8 @@
 #include "parser.hh"
 #include "runtime.hh"
 
+#define DEBUG false
+
 namespace AST {
 	struct TermNode {
 		Term* term;
@@ -64,7 +66,6 @@ namespace AST {
 			}
 			// If the node was assigned a new register, and wasn't a pre-existing variable
 			if (reg == nextRegister) {
-//				std::cerr << (node->reg + 1) << " = " << node->name << std::endl;
 				registers.push_back(node);
 				++ nextRegister;
 			} else {
@@ -73,6 +74,17 @@ namespace AST {
 			terms.pop();
 		}
 		return std::make_pair(root, registers);
+	}
+	
+	void pushInstruction(Epilog::Instruction* instruction) {
+		Epilog::Runtime::instructions.push_back(std::unique_ptr<Epilog::Instruction>(instruction));
+	}
+	
+	void printHeap() {
+		std::cerr << "Stack (" << Epilog::Runtime::stack.size() << "):" << std::endl;
+		Epilog::Runtime::stack.print();
+		std::cerr << "Registers (" << Epilog::Runtime::registers.size() << "):" << std::endl;
+		Epilog::Runtime::registers.print();
 	}
 	
 	void Clauses::interpret(Interpreter::Context& context) {
@@ -93,17 +105,14 @@ namespace AST {
 		std::unordered_set<int> instructions;
 		for (TermNode* node : registers) {
 			if (dynamic_cast<CompoundTerm*>(node->term)) {
-				std::cerr << "get_structure " << node->name << ", x" << (node->reg) << std::endl;
-				Epilog::unifyStructure(Epilog::HeapFunctor(node->name, node->children.size()), Epilog::Runtime::registers[node->reg]);
+				pushInstruction(new Epilog::UnifyCompoundTermInstruction(Epilog::HeapFunctor(node->name, node->children.size()), node->reg));
 				instructions.insert(node->reg);
 				for (TermNode* child : node->children) {
 					if (instructions.find(child->reg) == instructions.end()) {
-						std::cerr << "unify_variable x" << child->reg << std::endl;
-						Epilog::unifyVariable(Epilog::Runtime::registers[child->reg]);
+						pushInstruction(new Epilog::UnifyVariableInstruction(child->reg));
 						instructions.insert(child->reg);
 					} else {
-						std::cerr << "unify_value x" << child->reg << std::endl;
-						Epilog::unifyValue(Epilog::Runtime::registers[child->reg]);
+						pushInstruction(new Epilog::UnifyValueInstruction(child->reg));
 					}
 				}
 			}
@@ -113,7 +122,14 @@ namespace AST {
 		for (TermNode* node : registers) {
 			delete node;
 		}
-		// Use the runtime commands now to build this structure on the heap, and set a register value to point to its address
+		
+		// Execute the instructions
+		for (std::unique_ptr<Epilog::Instruction>& instruction : Epilog::Runtime::instructions) {
+			if (DEBUG) {
+				std::cerr << instruction->toString() << std::endl;
+			}
+			instruction->execute();
+		}
 	}
 	
 	void Rule::interpret(Interpreter::Context& context) {
@@ -136,30 +152,30 @@ namespace AST {
 		std::unordered_set<int> instructions;
 		for (TermNode* node : allocations) {
 			if (dynamic_cast<CompoundTerm*>(node->term)) {
-				std::cerr << "put_structure " << node->name << ", x" << node->reg << std::endl;
-				Epilog::pushCompoundTerm(Epilog::HeapFunctor(node->name, node->children.size()), Epilog::Runtime::registers[node->reg]);
+				pushInstruction(new Epilog::PushCompoundTermInstruction(Epilog::HeapFunctor(node->name, node->children.size()), node->reg));
 				instructions.insert(node->reg);
 				for (TermNode* child : node->children) {
 					if (instructions.find(child->reg) == instructions.end()) {
-						std::cerr << "set_variable x" << child->reg << std::endl;
-						Epilog::pushVariable(Epilog::Runtime::registers[child->reg]);
+						pushInstruction(new Epilog::PushVariableInstruction(child->reg));
 						instructions.insert(child->reg);
 					} else {
-						std::cerr << "set_value x" << child->reg << std::endl;
-						Epilog::pushValue(Epilog::Runtime::registers[child->reg]);
+						pushInstruction(new Epilog::PushValueInstruction(child->reg));
 					}
 				}
 			}
 		}
 		
-		std::cerr << "Stack (" << Epilog::Runtime::stack.size() << "):" << std::endl;
-		Epilog::Runtime::stack.print();
-		std::cerr << "Registers (" << Epilog::Runtime::registers.size() << "):" << std::endl;
-		Epilog::Runtime::registers.print();
-		
 		// Free the memory associated with each node
 		for (TermNode* node : registers) {
 			delete node;
+		}
+		
+		// Execute the instructions
+		for (std::unique_ptr<Epilog::Instruction>& instruction : Epilog::Runtime::instructions) {
+			if (DEBUG) {
+				std::cerr << instruction->toString() << std::endl;
+			}
+			instruction->execute();
 		}
 	}
 }

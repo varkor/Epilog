@@ -22,6 +22,11 @@ int main(int argc, char *argv[]) {
 		if (parser.parse(input, parser.grammar.clauses, parser.grammar.ignored, pegmatite::defaultErrorReporter, root)) {
 			try {
 				root->interpret(context);
+				std::cout << "true." << std::endl;
+			} catch (const Epilog::UnificationError& error) {
+				error.print();
+				std::cout << "false." << std::endl;
+				return EXIT_FAILURE;
 			} catch (const Epilog::RuntimeException& exception) {
 				exception.print();
 				return EXIT_FAILURE;
