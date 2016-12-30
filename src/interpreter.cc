@@ -96,11 +96,11 @@ namespace AST {
 	
 	typedef typename std::function<Epilog::Instruction*(TermNode*, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>&)> instructionGenerator;
 	
-	Epilog::BoundsCheckedVector<Epilog::Instruction>::size_type generateInstructionsFromClause(bool dependentAllocations, CompoundTerm* rootTerm, instructionGenerator unseenArgumentVariable, instructionGenerator unseenRegisterVariable, instructionGenerator seenArgumentVariable, instructionGenerator seenRegisterVariable, instructionGenerator compoundTerm, instructionGenerator conclusion) {
+	std::pair<Epilog::BoundsCheckedVector<Epilog::Instruction>::size_type, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>> generateInstructionsFromClause(bool dependentAllocations, CompoundTerm* rootTerm, instructionGenerator unseenArgumentVariable, instructionGenerator unseenRegisterVariable, instructionGenerator seenArgumentVariable, instructionGenerator seenRegisterVariable, instructionGenerator compoundTerm, instructionGenerator conclusion) {
 		auto tuple = buildAllocationTree(rootTerm);
 		TermNode* root = std::get<0>(tuple);
 		std::vector<TermNode*> registers = std::get<1>(tuple);
-		std::unordered_map<std::string, Epilog::HeapContainer::heapIndex> variableRegisters = std::get<2>(tuple);
+		std::unordered_map<std::string, Epilog::HeapContainer::heapIndex> allocations = std::get<2>(tuple);
 		
 		if (DEBUG) {
 			std::cerr << "Register allocation:" << std::endl;
@@ -136,21 +136,21 @@ namespace AST {
 			if (treatAsVariable || dynamic_cast<Variable*>(node->term)) {
 				if ((!dependentAllocations && treatAsVariable) || instructions.find(node->symbol) == instructions.end()) {
 					if (parent->parent == nullptr) {
-						pushInstruction(unseenArgumentVariable(node, variableRegisters));
+						pushInstruction(unseenArgumentVariable(node, allocations));
 					} else {
-						pushInstruction(unseenRegisterVariable(node, variableRegisters));
+						pushInstruction(unseenRegisterVariable(node, allocations));
 					}
 					instructions.insert(node->symbol);
 				} else {
 					if (parent->parent == nullptr) {
-						pushInstruction(seenArgumentVariable(node, variableRegisters));
+						pushInstruction(seenArgumentVariable(node, allocations));
 					} else {
-						pushInstruction(seenRegisterVariable(node, variableRegisters));
+						pushInstruction(seenRegisterVariable(node, allocations));
 					}
 				}
 			} else if (dynamic_cast<CompoundTerm*>(node->term)) {
 				if (parent != nullptr) {
-					pushInstruction(compoundTerm(node, variableRegisters));
+					pushInstruction(compoundTerm(node, allocations));
 					instructions.insert(node->symbol);
 				}
 				for (TermNode* child : node->children) {
@@ -170,7 +170,7 @@ namespace AST {
 				throw Epilog::RuntimeException("Found a term of an unknown type in the query.", __FILENAME__, __func__, __LINE__);
 			}
 		}
-		pushInstruction(conclusion(root, variableRegisters));
+		pushInstruction(conclusion(root, allocations));
 		
 		// Free the memory associated with each node
 		for (TermNode* node : registers) {
@@ -185,7 +185,7 @@ namespace AST {
 			}
 		}
 		
-		return startAddress;
+		return std::make_pair(startAddress, allocations);
 	}
 	
 	void Clauses::interpret(Interpreter::Context& context) {
@@ -197,12 +197,12 @@ namespace AST {
 	void Fact::interpret(Interpreter::Context& context) {
 		std::cerr << "Register fact: " << head->toString() << std::endl;
 		
-		auto unseenArgumentVariable = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& variableRegisters) -> Epilog::Instruction* { return new Epilog::CopyArgumentToRegisterInstruction(variableRegisters[node->symbol], node->reg); };
-		auto unseenRegisterVariable = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& variableRegisters) -> Epilog::Instruction* { return new Epilog::UnifyVariableInstruction(node->reg); };
-		auto seenArgumentVariable = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& variableRegisters) -> Epilog::Instruction* { return new Epilog::UnifyRegisterAndArgumentInstruction(variableRegisters[node->symbol], node->reg); };
-		auto seenRegisterVariable = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& variableRegisters) -> Epilog::Instruction* { return new Epilog::UnifyValueInstruction(node->reg); };
-		auto compoundTerm = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& variableRegisters) -> Epilog::Instruction* { return new Epilog::UnifyCompoundTermInstruction(Epilog::HeapFunctor(node->name, node->children.size()), node->reg); };
-		auto conclusion = [] (TermNode* root, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& variableRegisters) -> Epilog::Instruction* { return new Epilog::ProceedInstruction(); };
+		auto unseenArgumentVariable = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& allocations) -> Epilog::Instruction* { return new Epilog::CopyArgumentToRegisterInstruction(allocations[node->symbol], node->reg); };
+		auto unseenRegisterVariable = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& allocations) -> Epilog::Instruction* { return new Epilog::UnifyVariableInstruction(node->reg); };
+		auto seenArgumentVariable = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& allocations) -> Epilog::Instruction* { return new Epilog::UnifyRegisterAndArgumentInstruction(allocations[node->symbol], node->reg); };
+		auto seenRegisterVariable = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& allocations) -> Epilog::Instruction* { return new Epilog::UnifyValueInstruction(node->reg); };
+		auto compoundTerm = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& allocations) -> Epilog::Instruction* { return new Epilog::UnifyCompoundTermInstruction(Epilog::HeapFunctor(node->name, node->children.size()), node->reg); };
+		auto conclusion = [] (TermNode* root, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& allocations) -> Epilog::Instruction* { return new Epilog::ProceedInstruction(); };
 		
 		Epilog::Runtime::labels[head->name + "/" + std::to_string(head->parameterList->parameters.size())] = Epilog::Runtime::instructions.size();
 		generateInstructionsFromClause(false, head.get(), unseenArgumentVariable, unseenRegisterVariable, seenArgumentVariable, seenRegisterVariable, compoundTerm, conclusion);
@@ -215,14 +215,16 @@ namespace AST {
 	void Query::interpret(Interpreter::Context& context) {
 		std::cerr << "Register query: " << head->toString() << std::endl;
 		
-		auto unseenArgumentVariable = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& variableRegisters) -> Epilog::Instruction* { return new Epilog::PushVariableToAllInstruction(variableRegisters[node->symbol], node->reg); };
-		auto unseenRegisterVariable = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& variableRegisters) -> Epilog::Instruction* { return new Epilog::PushVariableInstruction(node->reg); };
-		auto seenArgumentVariable = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& variableRegisters) -> Epilog::Instruction* { return new Epilog::CopyRegisterToArgumentInstruction(variableRegisters[node->symbol], node->reg); };
-		auto seenRegisterVariable = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& variableRegisters) -> Epilog::Instruction* { return new Epilog::PushValueInstruction(node->reg); };
-		auto compoundTerm = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& variableRegisters) -> Epilog::Instruction* { return new Epilog::PushCompoundTermInstruction(Epilog::HeapFunctor(node->name, node->children.size()), node->reg); };
-		auto conclusion = [] (TermNode* root, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& variableRegisters) -> Epilog::Instruction* { return new Epilog::CallInstruction(Epilog::HeapFunctor(root->name, root->children.size())); };
+		auto unseenArgumentVariable = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& allocations) -> Epilog::Instruction* { return new Epilog::PushVariableToAllInstruction(allocations[node->symbol], node->reg); };
+		auto unseenRegisterVariable = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& allocations) -> Epilog::Instruction* { return new Epilog::PushVariableInstruction(node->reg); };
+		auto seenArgumentVariable = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& allocations) -> Epilog::Instruction* { return new Epilog::CopyRegisterToArgumentInstruction(allocations[node->symbol], node->reg); };
+		auto seenRegisterVariable = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& allocations) -> Epilog::Instruction* { return new Epilog::PushValueInstruction(node->reg); };
+		auto compoundTerm = [] (TermNode* node, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& allocations) -> Epilog::Instruction* { return new Epilog::PushCompoundTermInstruction(Epilog::HeapFunctor(node->name, node->children.size()), node->reg); };
+		auto conclusion = [] (TermNode* root, std::unordered_map<std::string, Epilog::HeapContainer::heapIndex>& allocations) -> Epilog::Instruction* { return new Epilog::CallInstruction(Epilog::HeapFunctor(root->name, root->children.size())); };
 		
-		Epilog::Runtime::nextInstruction = generateInstructionsFromClause(true, head.get(), unseenArgumentVariable, unseenRegisterVariable, seenArgumentVariable, seenRegisterVariable, compoundTerm, conclusion);
+		auto pair = generateInstructionsFromClause(true, head.get(), unseenArgumentVariable, unseenRegisterVariable, seenArgumentVariable, seenRegisterVariable, compoundTerm, conclusion);
+		Epilog::Runtime::nextInstruction = pair.first;
+		auto allocations = pair.second;
 		
 		// Execute the instructions
 		if (DEBUG) {
@@ -235,5 +237,10 @@ namespace AST {
 			}
 			instruction->execute();
 		}
+		std::cerr << "Bindings:" << std::endl;
+		for (auto allocation : allocations) {
+			std::cerr << allocation.first << " = " << Epilog::Runtime::registers[allocation.second]->trace() << std::endl;
+		}
+		
 	}
 }

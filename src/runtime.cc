@@ -13,6 +13,29 @@ namespace Epilog {
 	BoundsCheckedVector<Instruction>::size_type Runtime::nextInstruction;
 	HeapContainer::heapIndex Runtime::unificationIndex;
 	
+	std::string HeapTuple::trace() const {
+		switch (type) {
+			case Type::compoundTerm: {
+				if (HeapFunctor* functor = dynamic_cast<HeapFunctor*>(Runtime::stack[reference].get())) {
+					std::string parameters = "";
+					for (int i = 0; i < functor->parameters; ++ i) {
+						parameters += (i > 0 ? "," : "") + Runtime::stack[reference + (i + 1)]->trace();
+					}
+					return Runtime::stack[reference]->trace() + (functor->parameters > 0 ? "(" + parameters + ")" : "");
+				} else {
+					throw RuntimeException("Dereferenced a structure that did not point to a functor.", __FILENAME__, __func__, __LINE__);
+				}
+			}
+			case Type::reference: {
+				if (Runtime::stack[reference].get() != this) {
+					return Runtime::stack[reference]->trace();
+				} else {
+					return "_";
+				}
+			}
+		}
+	}
+	
 	void PushCompoundTermInstruction::execute() {
 		HeapTuple header(HeapTuple::Type::compoundTerm, Runtime::stack.size() + 1);
 		Runtime::stack.push_back(header.copy());

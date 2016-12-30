@@ -44,6 +44,8 @@ namespace Epilog {
 		virtual std::string toString() const {
 			return "container";
 		}
+		
+		virtual std::string trace() const = 0;
 	};
 	
 	struct HeapTuple: HeapContainer {
@@ -59,6 +61,8 @@ namespace Epilog {
 			return std::string("(") + (type == Type::compoundTerm ? "compound term" : "reference") + ", " + std::to_string(reference) + ")";
 		}
 		
+		virtual std::string trace() const override;
+		
 		HeapTuple(Type type, heapIndex reference) : type(type), reference(reference) { }
 	};
 	
@@ -72,6 +76,10 @@ namespace Epilog {
 		
 		virtual std::string toString() const override {
 			return name + "/" + std::to_string(parameters);
+		}
+		
+		virtual std::string trace() const override {
+			return name;
 		}
 		
 		HeapFunctor(std::string name, int parameters) : name(name), parameters(parameters) { }
