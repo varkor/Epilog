@@ -1,4 +1,5 @@
 #include <iomanip>
+#include <unordered_map>
 
 #pragma once
 
@@ -40,7 +41,7 @@ namespace Epilog {
 		
 		virtual std::unique_ptr<HeapContainer> copy() const = 0;
 		
-		virtual std::string toString() {
+		virtual std::string toString() const {
 			return "container";
 		}
 	};
@@ -54,7 +55,7 @@ namespace Epilog {
 			return std::unique_ptr<HeapTuple>(new HeapTuple(*this));
 		}
 		
-		virtual std::string toString() override {
+		virtual std::string toString() const override {
 			return std::string("(") + (type == Type::compoundTerm ? "compound term" : "reference") + ", " + std::to_string(reference) + ")";
 		}
 		
@@ -69,7 +70,7 @@ namespace Epilog {
 			return std::unique_ptr<HeapFunctor>(new HeapFunctor(*this));
 		}
 		
-		virtual std::string toString() override {
+		virtual std::string toString() const override {
 			return name + "/" + std::to_string(parameters);
 		}
 		
@@ -107,7 +108,7 @@ namespace Epilog {
 		public:
 		void print() {
 			for (HeapContainer::heapIndex i = 0; i < size(); ++ i) {
-				std::cerr << std::setw(2) << i << ": " << (*this)[i]->toString() << std::endl;
+				std::cerr << std::setw(2) << i << ": " << ((*this)[i] != nullptr ? (*this)[i]->toString() : "null") << std::endl;
 			}
 		}
 	};
@@ -117,7 +118,7 @@ namespace Epilog {
 		
 		virtual void execute() = 0;
 		
-		virtual std::string toString() = 0;
+		virtual std::string toString() const = 0;
 	};
 	
 	class Runtime {
@@ -131,90 +132,159 @@ namespace Epilog {
 		// The instructions corresponding to the compiled program
 		static BoundsCheckedVector<Instruction> instructions;
 		
+		// Labels with which a particular instruction can be jumped to
+		static std::unordered_map<std::string, BoundsCheckedVector<Instruction>::size_type> labels;
+		
 		static BoundsCheckedVector<Instruction>::size_type nextInstruction;
 		
 		static Mode mode;
 		
-		static HeapContainer::heapIndex S;
+		static HeapContainer::heapIndex unificationIndex;
 	};
 	
 	struct PushCompoundTermInstruction: Instruction {
 		const HeapFunctor functor;
 		int registerIndex;
-		std::unique_ptr<HeapContainer>& reg;
 		
-		PushCompoundTermInstruction(const HeapFunctor functor, int registerIndex) : functor(functor), registerIndex(registerIndex), reg(Runtime::registers[registerIndex]) { }
+		PushCompoundTermInstruction(const HeapFunctor functor, int registerIndex) : functor(functor), registerIndex(registerIndex) { }
 		
 		virtual void execute() override;
 		
-		virtual std::string toString() override {
-			return "push_structure " + functor.name + "/" + std::to_string(functor.parameters) + ", R" + std::to_string(registerIndex);
+		virtual std::string toString() const override {
+			return "put_structure " + functor.name + "/" + std::to_string(functor.parameters) + ", R" + std::to_string(registerIndex);
 		}
 	};
 	
 	struct PushVariableInstruction: Instruction {
 		int registerIndex;
-		std::unique_ptr<HeapContainer>& reg;
 		
-		PushVariableInstruction(int registerIndex) : registerIndex(registerIndex), reg(Runtime::registers[registerIndex]) { }
+		PushVariableInstruction(int registerIndex) : registerIndex(registerIndex) { }
 		
 		virtual void execute() override;
 		
-		virtual std::string toString() override {
-			return "push_variable R" + std::to_string(registerIndex);
+		virtual std::string toString() const override {
+			return "set_variable R" + std::to_string(registerIndex);
 		}
 	};
 	
 	struct PushValueInstruction: Instruction {
 		int registerIndex;
-		std::unique_ptr<HeapContainer>& reg;
 		
-		PushValueInstruction(int registerIndex) : registerIndex(registerIndex), reg(Runtime::registers[registerIndex]) { }
+		PushValueInstruction(int registerIndex) : registerIndex(registerIndex) { }
 		
 		virtual void execute() override;
 		
-		virtual std::string toString() override {
-			return "push_value R" + std::to_string(registerIndex);
+		virtual std::string toString() const override {
+			return "set_value R" + std::to_string(registerIndex);
 		}
 	};
 	
 	struct UnifyCompoundTermInstruction: Instruction {
 		const HeapFunctor functor;
 		int registerIndex;
-		std::unique_ptr<HeapContainer>& reg;
 		
-		UnifyCompoundTermInstruction(const HeapFunctor functor, int registerIndex) : functor(functor), registerIndex(registerIndex), reg(Runtime::registers[registerIndex]){ }
+		UnifyCompoundTermInstruction(const HeapFunctor functor, int registerIndex) : functor(functor), registerIndex(registerIndex) { }
 		
 		virtual void execute() override;
 		
-		virtual std::string toString() override {
-			return "unify_structure " + functor.name + "/" + std::to_string(functor.parameters) + ", R" + std::to_string(registerIndex);
+		virtual std::string toString() const override {
+			return "get_structure " + functor.name + "/" + std::to_string(functor.parameters) + ", R" + std::to_string(registerIndex);
 		}
 	};
 	
 	struct UnifyVariableInstruction: Instruction {
 		int registerIndex;
-		std::unique_ptr<HeapContainer>& reg;
 		
-		UnifyVariableInstruction(int registerIndex) : registerIndex(registerIndex), reg(Runtime::registers[registerIndex]) { }
+		UnifyVariableInstruction(int registerIndex) : registerIndex(registerIndex) { }
 		
 		virtual void execute() override;
 		
-		virtual std::string toString() override {
+		virtual std::string toString() const override {
 			return "unify_variable R" + std::to_string(registerIndex);
 		}
 	};
 	
 	struct UnifyValueInstruction: Instruction {
 		int registerIndex;
-		std::unique_ptr<HeapContainer>& reg;
 		
-		UnifyValueInstruction(int registerIndex) : registerIndex(registerIndex), reg(Runtime::registers[registerIndex]) { }
+		UnifyValueInstruction(int registerIndex) : registerIndex(registerIndex) { }
 		
 		virtual void execute() override;
 		
-		virtual std::string toString() override {
+		virtual std::string toString() const override {
 			return "unify_value R" + std::to_string(registerIndex);
+		}
+	};
+	
+	struct PushVariableToAllInstruction: Instruction {
+		int registerIndex;
+		int argumentIndex;
+		
+		PushVariableToAllInstruction(int registerIndex, int argumentIndex) : registerIndex(registerIndex), argumentIndex(argumentIndex) { }
+		
+		virtual void execute() override;
+		
+		virtual std::string toString() const override {
+			return "put_variable R" + std::to_string(registerIndex) + ", R" + std::to_string(argumentIndex);
+		}
+	};
+	
+	struct CopyRegisterToArgumentInstruction: Instruction {
+		int registerIndex;
+		int argumentIndex;
+		
+		CopyRegisterToArgumentInstruction(int registerIndex, int argumentIndex) : registerIndex(registerIndex), argumentIndex(argumentIndex) { }
+		
+		virtual void execute() override;
+		
+		virtual std::string toString() const override {
+			return "put_value R" + std::to_string(registerIndex) + ", R" + std::to_string(argumentIndex);
+		}
+	};
+	
+	struct CopyArgumentToRegisterInstruction: Instruction {
+		int registerIndex;
+		int argumentIndex;
+		
+		CopyArgumentToRegisterInstruction(int registerIndex, int argumentIndex) : registerIndex(registerIndex), argumentIndex(argumentIndex) { }
+		
+		virtual void execute() override;
+		
+		virtual std::string toString() const override {
+			return "get_variable R" + std::to_string(registerIndex) + ", R" + std::to_string(argumentIndex);
+		}
+	};
+	
+	struct UnifyRegisterAndArgumentInstruction: Instruction {
+		int registerIndex;
+		int argumentIndex;
+		
+		UnifyRegisterAndArgumentInstruction(int registerIndex, int argumentIndex) : registerIndex(registerIndex), argumentIndex(argumentIndex) { }
+		
+		virtual void execute() override;
+		
+		virtual std::string toString() const override {
+			return "get_value R" + std::to_string(registerIndex) + ", R" + std::to_string(argumentIndex);
+		}
+	};
+	
+	struct CallInstruction: Instruction {
+		HeapFunctor functor;
+		
+		CallInstruction(const HeapFunctor functor) : functor(functor) { }
+		
+		virtual void execute() override;
+		
+		virtual std::string toString() const override {
+			return "call " + functor.name + "/" + std::to_string(functor.parameters);
+		}
+	};
+	
+	struct ProceedInstruction: Instruction {
+		virtual void execute() override;
+		
+		virtual std::string toString() const override {
+			return "proceed";
 		}
 	};
 }
