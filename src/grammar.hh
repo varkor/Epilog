@@ -58,15 +58,19 @@ namespace Parser {
 		// A set of empty brackets `()` is equivalent to having no brackets at all.
 		Rule compoundTerm = identifier >> parameters;
 		
-		// Rule.
-		Rule rule = compoundTerm >> ":-" >> compoundTerm;
+		// Compound terms: a series of goals.
+		Rule compoundTerms = compoundTerm >> *(',' >> compoundTerm);
 		
-		// Clause: either a fact, a rule, or a query.
+		// Fact.
 		Rule fact = compoundTerm;
 		
-		// Query: a way by which we can invoke unification of rules without an interactive mode.
-		Rule query = "?-"_E >> compoundTerm;
+		// Rule.
+		Rule rule = compoundTerm >> ":-" >> compoundTerms;
 		
+		// Query: a way by which we can invoke unification of rules without an interactive mode.
+		Rule query = "?-"_E >> compoundTerms;
+		
+		// Clause: either a fact, a rule, or a query.
 		Rule clause = (query | rule | fact) >> '.';
 		
 		// Clauses: a standard Epilog program is made up of a series of clauses.

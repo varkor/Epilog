@@ -10,6 +10,7 @@ namespace Parser {
 		BindAST<AST::Variable> variable = EpilogGrammar::get().variable;
 		BindAST<AST::Number> number = EpilogGrammar::get().number;
 		BindAST<AST::CompoundTerm> compoundTerm = EpilogGrammar::get().compoundTerm;
+		BindAST<AST::Body> body = EpilogGrammar::get().compoundTerms;
 		BindAST<AST::ParameterList> parameterList = EpilogGrammar::get().parameters;
 		BindAST<AST::Fact> fact = EpilogGrammar::get().fact;
 		BindAST<AST::Rule> rule = EpilogGrammar::get().rule;

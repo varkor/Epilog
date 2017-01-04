@@ -1,11 +1,12 @@
 #include <iomanip>
+#include <stack>
 #include <unordered_map>
 
 #pragma once
 
 #define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 
-#define polymorphic(class) \
+#define POLYMORPHIC(class) \
 	virtual ~class() = default;\
 	class() = default;\
 	class(const class&) = default;\
@@ -35,9 +36,7 @@ namespace Epilog {
 	
 	struct HeapContainer {
 		// Ensure HeapContainer is polymorphic, so that we can use dynamic_cast
-		polymorphic(HeapContainer);
-		
-		typedef typename std::vector<std::unique_ptr<HeapContainer>>::size_type heapIndex;
+		POLYMORPHIC(HeapContainer);
 		
 		virtual std::unique_ptr<HeapContainer> copy() const = 0;
 		
@@ -48,10 +47,61 @@ namespace Epilog {
 		virtual std::string trace() const = 0;
 	};
 	
+	enum class StorageArea { heap, reg, environment, undefined };
+	
+	struct HeapReference: public std::pair<StorageArea, std::vector<std::unique_ptr<HeapContainer>>::size_type> {
+		typedef typename std::vector<std::unique_ptr<HeapContainer>>::size_type heapIndex;
+		
+		StorageArea area;
+		heapIndex index;
+		
+		HeapReference(StorageArea area, heapIndex index) : area(area), index(index) { }
+		
+		HeapReference() : HeapReference(StorageArea::undefined, 0) { }
+		
+		bool operator==(const HeapReference& other) {
+			return area == other.area && index == other.index;
+		}
+		
+		bool operator!=(const HeapReference& other) {
+			return !(*this == other);
+		}
+		
+		std::unique_ptr<HeapContainer>& get() const;
+		
+		std::unique_ptr<HeapContainer> getAsCopy() const {
+			return get()->copy();
+		}
+		
+		HeapContainer* getPointer() const {
+			return get().get();
+		}
+		
+		void assign(std::unique_ptr<HeapContainer> value) const;
+		
+		std::string toString() const {
+			std::string string;
+			switch (area) {
+				case StorageArea::heap:
+					string += "H";
+					break;
+				case StorageArea::reg:
+					string += "T";
+					break;
+				case StorageArea::environment:
+					string += "P";
+					break;
+				case StorageArea::undefined:
+					return string + "?";
+			}
+			return string + std::to_string(index);
+		}
+	};
+	
 	struct HeapTuple: HeapContainer {
 		enum class Type { compoundTerm, reference };
 		Type type;
-		heapIndex reference;
+		HeapReference::heapIndex reference;
 		
 		virtual std::unique_ptr<HeapContainer> copy() const override {
 			return std::unique_ptr<HeapTuple>(new HeapTuple(*this));
@@ -63,7 +113,7 @@ namespace Epilog {
 		
 		virtual std::string trace() const override;
 		
-		HeapTuple(Type type, heapIndex reference) : type(type), reference(reference) { }
+		HeapTuple(Type type, HeapReference::heapIndex reference) : type(type), reference(reference) { }
 	};
 	
 	struct HeapFunctor: HeapContainer {
@@ -97,9 +147,9 @@ namespace Epilog {
 	
 	void unifyValue(std::unique_ptr<HeapContainer>& reg);
 	
-	HeapContainer::heapIndex dereference(std::unique_ptr<HeapContainer>& container, HeapContainer::heapIndex index);
+	HeapReference::heapIndex dereference(std::unique_ptr<HeapContainer>& container, HeapReference::heapIndex index);
 	
-	HeapContainer::heapIndex dereference(HeapContainer::heapIndex index);
+	HeapReference::heapIndex dereference(HeapReference::heapIndex index);
 	
 	template <class T>
 	class BoundsCheckedVector: public std::vector<std::unique_ptr<T>> {
@@ -115,24 +165,31 @@ namespace Epilog {
 	class StackHeap: public BoundsCheckedVector<HeapContainer> {
 		public:
 		void print() {
-			for (HeapContainer::heapIndex i = 0; i < size(); ++ i) {
+			for (HeapReference::heapIndex i = 0; i < size(); ++ i) {
 				std::cerr << std::setw(2) << i << ": " << ((*this)[i] != nullptr ? (*this)[i]->toString() : "null") << std::endl;
 			}
 		}
 	};
 	
 	struct Instruction {
-		polymorphic(Instruction);
+		POLYMORPHIC(Instruction);
 		
 		virtual void execute() = 0;
 		
 		virtual std::string toString() const = 0;
 	};
 	
+	struct Environment {
+		BoundsCheckedVector<Instruction>::size_type nextGoal;
+		StackHeap variables;
+		
+		Environment(BoundsCheckedVector<Instruction>::size_type nextGoal) : nextGoal(nextGoal) {}
+	};
+	
 	class Runtime {
 		public:
 		// The global stack used to contain term structures used when unifying.
-		static StackHeap stack;
+		static StackHeap heap;
 		
 		// The registers used to temporarily hold pointers when building queries or rules
 		static StackHeap registers;
@@ -140,139 +197,144 @@ namespace Epilog {
 		// The instructions corresponding to the compiled program
 		static BoundsCheckedVector<Instruction> instructions;
 		
+		// The environment stack used to store variable bindings
+		static std::stack<std::unique_ptr<Environment>> environments;
+		
 		// Labels with which a particular instruction can be jumped to
 		static std::unordered_map<std::string, BoundsCheckedVector<Instruction>::size_type> labels;
 		
 		static BoundsCheckedVector<Instruction>::size_type nextInstruction;
 		
+		static BoundsCheckedVector<Instruction>::size_type nextGoal;
+		
 		static Mode mode;
 		
-		static HeapContainer::heapIndex unificationIndex;
+		static HeapReference::heapIndex unificationIndex;
 	};
 	
 	struct PushCompoundTermInstruction: Instruction {
 		const HeapFunctor functor;
-		int registerIndex;
+		HeapReference registerReference;
 		
-		PushCompoundTermInstruction(const HeapFunctor functor, int registerIndex) : functor(functor), registerIndex(registerIndex) { }
+		PushCompoundTermInstruction(const HeapFunctor functor, HeapReference registerReference) : functor(functor), registerReference(registerReference) { }
 		
 		virtual void execute() override;
 		
 		virtual std::string toString() const override {
-			return "put_structure " + functor.name + "/" + std::to_string(functor.parameters) + ", R" + std::to_string(registerIndex);
+			return "put_structure " + functor.name + "/" + std::to_string(functor.parameters) + ", " + registerReference.toString();
 		}
 	};
 	
 	struct PushVariableInstruction: Instruction {
-		int registerIndex;
+		HeapReference registerReference;
 		
-		PushVariableInstruction(int registerIndex) : registerIndex(registerIndex) { }
+		PushVariableInstruction(HeapReference registerReference) : registerReference(registerReference) { }
 		
 		virtual void execute() override;
 		
 		virtual std::string toString() const override {
-			return "set_variable R" + std::to_string(registerIndex);
+			return "set_variable " + registerReference.toString();
 		}
 	};
 	
 	struct PushValueInstruction: Instruction {
-		int registerIndex;
+		HeapReference registerReference;
 		
-		PushValueInstruction(int registerIndex) : registerIndex(registerIndex) { }
+		PushValueInstruction(HeapReference registerReference) : registerReference(registerReference) { }
 		
 		virtual void execute() override;
 		
 		virtual std::string toString() const override {
-			return "set_value R" + std::to_string(registerIndex);
+			return "set_value " + registerReference.toString();
 		}
 	};
 	
 	struct UnifyCompoundTermInstruction: Instruction {
 		const HeapFunctor functor;
-		int registerIndex;
+		HeapReference registerReference;
 		
-		UnifyCompoundTermInstruction(const HeapFunctor functor, int registerIndex) : functor(functor), registerIndex(registerIndex) { }
+		UnifyCompoundTermInstruction(const HeapFunctor functor, HeapReference registerReference) : functor(functor), registerReference(registerReference) { }
 		
 		virtual void execute() override;
 		
 		virtual std::string toString() const override {
-			return "get_structure " + functor.name + "/" + std::to_string(functor.parameters) + ", R" + std::to_string(registerIndex);
+			return "get_structure " + functor.name + "/" + std::to_string(functor.parameters) + ", " + registerReference.toString();
 		}
 	};
 	
 	struct UnifyVariableInstruction: Instruction {
-		int registerIndex;
+		HeapReference registerReference;
 		
-		UnifyVariableInstruction(int registerIndex) : registerIndex(registerIndex) { }
+		UnifyVariableInstruction(HeapReference registerReference) : registerReference(registerReference) { }
 		
 		virtual void execute() override;
 		
 		virtual std::string toString() const override {
-			return "unify_variable R" + std::to_string(registerIndex);
+			return "unify_variable " + registerReference.toString();
 		}
 	};
 	
 	struct UnifyValueInstruction: Instruction {
-		int registerIndex;
+		HeapReference registerReference;
 		
-		UnifyValueInstruction(int registerIndex) : registerIndex(registerIndex) { }
+		UnifyValueInstruction(HeapReference registerReference) : registerReference(registerReference) { }
 		
 		virtual void execute() override;
 		
 		virtual std::string toString() const override {
-			return "unify_value R" + std::to_string(registerIndex);
+			return "unify_value " + registerReference.toString();
 		}
 	};
 	
 	struct PushVariableToAllInstruction: Instruction {
-		int registerIndex;
-		int argumentIndex;
+		HeapReference registerReference;
+		HeapReference argumentReference;
 		
-		PushVariableToAllInstruction(int registerIndex, int argumentIndex) : registerIndex(registerIndex), argumentIndex(argumentIndex) { }
+		PushVariableToAllInstruction(HeapReference registerReference, HeapReference argumentReference) : registerReference(registerReference), argumentReference(argumentReference) { }
 		
 		virtual void execute() override;
 		
 		virtual std::string toString() const override {
-			return "put_variable R" + std::to_string(registerIndex) + ", R" + std::to_string(argumentIndex);
+			return "put_variable " + registerReference.toString() + ", " + argumentReference.toString();
 		}
 	};
 	
 	struct CopyRegisterToArgumentInstruction: Instruction {
-		int registerIndex;
-		int argumentIndex;
+		HeapReference registerReference;
+		HeapReference argumentReference;
 		
-		CopyRegisterToArgumentInstruction(int registerIndex, int argumentIndex) : registerIndex(registerIndex), argumentIndex(argumentIndex) { }
+		CopyRegisterToArgumentInstruction(HeapReference registerReference, HeapReference argumentReference) : registerReference(registerReference), argumentReference(argumentReference) { }
 		
 		virtual void execute() override;
 		
 		virtual std::string toString() const override {
-			return "put_value R" + std::to_string(registerIndex) + ", R" + std::to_string(argumentIndex);
+			return "put_value " + registerReference.toString() + ", " + argumentReference.toString();
 		}
 	};
 	
 	struct CopyArgumentToRegisterInstruction: Instruction {
-		int registerIndex;
-		int argumentIndex;
+		HeapReference registerReference;
+		HeapReference argumentReference;
 		
-		CopyArgumentToRegisterInstruction(int registerIndex, int argumentIndex) : registerIndex(registerIndex), argumentIndex(argumentIndex) { }
+		CopyArgumentToRegisterInstruction(HeapReference registerReference, HeapReference argumentReference) : registerReference(registerReference), argumentReference(argumentReference) { }
 		
 		virtual void execute() override;
 		
 		virtual std::string toString() const override {
-			return "get_variable R" + std::to_string(registerIndex) + ", R" + std::to_string(argumentIndex);
+			return "get_variable " + registerReference.toString() + ", " + argumentReference.toString();
 		}
 	};
 	
 	struct UnifyRegisterAndArgumentInstruction: Instruction {
-		int registerIndex;
-		int argumentIndex;
+		HeapReference registerReference;
+		HeapReference argumentReference;
 		
-		UnifyRegisterAndArgumentInstruction(int registerIndex, int argumentIndex) : registerIndex(registerIndex), argumentIndex(argumentIndex) { }
+		UnifyRegisterAndArgumentInstruction(HeapReference registerReference, HeapReference argumentReference) : registerReference(registerReference), argumentReference(argumentReference) { }
 		
 		virtual void execute() override;
 		
 		virtual std::string toString() const override {
-			return "get_value R" + std::to_string(registerIndex) + ", R" + std::to_string(argumentIndex);
+			return "get_value " + registerReference.toString() + ", " + argumentReference.toString();
 		}
 	};
 	
@@ -293,6 +355,26 @@ namespace Epilog {
 		
 		virtual std::string toString() const override {
 			return "proceed";
+		}
+	};
+	
+	struct AllocateInstruction: Instruction {
+		int variables;
+		
+		AllocateInstruction(int variables) : variables(variables) { }
+		
+		virtual void execute() override;
+		
+		virtual std::string toString() const override {
+			return "allocate " + std::to_string(variables);
+		}
+	};
+	
+	struct DeallocateInstruction: Instruction {
+		virtual void execute() override;
+		
+		virtual std::string toString() const override {
+			return "deallocate";
 		}
 	};
 }

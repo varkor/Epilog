@@ -46,14 +46,25 @@ namespace AST {
 			for (auto& parameter : parameterList->parameters) {
 				parameters += (!first ? "," : (first = false, "")) + parameter->toString();
 			}
-			return name + "/" + std::to_string(parameterList->parameters.size()) + "(" + parameters + ")";
+			return name + "/" + std::to_string(parameterList->parameters.size()) + (parameterList->parameters.size() > 0 ? "(" + parameters + ")" : "");
+		}
+	};
+	
+	class Body: public pegmatite::ASTContainer {
+		public:
+		pegmatite::ASTList<CompoundTerm> goals;
+		
+		std::string toString() const {
+			std::string compoundTerms;
+			bool first = true;
+			for (auto& goal : goals) {
+				compoundTerms += (!first ? "," : (first = false, "")) + goal->toString();
+			}
+			return compoundTerms;
 		}
 	};
 	
 	class Clause: public pegmatite::ASTContainer {
-		protected:
-		pegmatite::ASTPtr<CompoundTerm> head;
-		
 		public:
 		virtual void interpret(Interpreter::Context& context) = 0;
 	};
@@ -90,19 +101,23 @@ namespace AST {
 	};
 	
 	class Fact: public Clause {
+		pegmatite::ASTPtr<CompoundTerm> head;
+		
 		public:
 		void interpret(Interpreter::Context& context) override;
 	};
 	
 	class Rule: public Clause {
-		// Required now for the parsing to succeed, though this will be generalised in the future.
-		pegmatite::ASTPtr<CompoundTerm> body;
+		pegmatite::ASTPtr<CompoundTerm> head;
+		pegmatite::ASTPtr<Body> body;
 		
 		public:
 		void interpret(Interpreter::Context& context) override;
 	};
 	
 	class Query: public Clause {
+		pegmatite::ASTPtr<Body> body;
+		
 		public:
 		void interpret(Interpreter::Context& context) override;
 	};
