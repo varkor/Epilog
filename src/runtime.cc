@@ -8,11 +8,15 @@ namespace Epilog {
 	StackHeap Runtime::heap;
 	StackHeap Runtime::registers;
 	BoundsCheckedVector<Instruction> Runtime::instructions;
-	std::stack<std::unique_ptr<Environment>> Runtime::environments;
-	std::unordered_map<std::string, BoundsCheckedVector<Instruction>::size_type> Runtime::labels;
+	std::vector<std::unique_ptr<StateReference>> Runtime::stateStack;
+	StateReference::stateIndex Runtime::topEnvironment = -1UL;
+	StateReference::stateIndex Runtime::topChoicePoint = -1UL;
+	int Runtime::currentNumberOfArguments = 0;
+	std::vector<HeapReference> Runtime::trail;
+	std::unordered_map<std::string, Instruction::instructionReference> Runtime::labels;
 	Mode Runtime::mode;
-	BoundsCheckedVector<Instruction>::size_type Runtime::nextInstruction;
-	BoundsCheckedVector<Instruction>::size_type Runtime::nextGoal;
+	Instruction::instructionReference Runtime::nextInstruction;
+	Instruction::instructionReference Runtime::nextGoal;
 	HeapReference::heapIndex Runtime::unificationIndex;
 	
 	std::unique_ptr<HeapContainer>& HeapReference::get() const {
@@ -22,7 +26,7 @@ namespace Epilog {
 			case StorageArea::reg:
 				return Runtime::registers[index];
 			case StorageArea::environment:
-				return Runtime::environments.top()->variables[index];
+				return Runtime::currentEnvironment()->variables[index];
 			case StorageArea::undefined:
 				throw RuntimeException("Tried to get an undefined reference.", __FILENAME__, __func__, __LINE__);
 		}
@@ -37,7 +41,7 @@ namespace Epilog {
 				Runtime::registers[index] = std::move(value);
 				break;
 			case StorageArea::environment:
-				Runtime::environments.top()->variables[index] = std::move(value);
+				Runtime::currentEnvironment()->variables[index] = std::move(value);
 				break;
 			case StorageArea::undefined:
 				throw RuntimeException("Tried to assign to an undefined reference.", __FILENAME__, __func__, __LINE__);
@@ -102,11 +106,27 @@ namespace Epilog {
 		}
 	}
 	
-	void bind(HeapReference& bound, HeapReference& to) {
-		if (to.area != StorageArea::heap) {
-			throw RuntimeException("Tried to bind to a reference not on the heap.", __FILENAME__, __func__, __LINE__);
+	void trail(HeapReference& reference) {
+		// Only conditional bindings need to be stored.
+		// These are bindings that affect variables existing before the creation of the current choice point.
+		if (Runtime::topChoicePoint != -1UL && ((reference.area == StorageArea::heap && reference.index < Runtime::currentChoicePoint()->heapSize) || reference.area == StorageArea::environment)) {
+			Runtime::trail.push_back(reference);
 		}
-		bound.assign(std::unique_ptr<HeapTuple>(new HeapTuple(HeapTuple::Type::reference, to.index)));
+	}
+	
+	void bind(HeapReference& referenceA, HeapReference& referenceB) {
+		HeapTuple* tupleA, * tupleB;
+		if ((tupleA = dynamic_cast<HeapTuple*>(referenceA.getPointer())) && (tupleB = dynamic_cast<HeapTuple*>(referenceB.getPointer()))) {
+			if (tupleA->type == HeapTuple::Type::reference && (tupleB->type != HeapTuple::Type::reference || referenceA.index <= referenceB.index)) {
+				referenceA.assign(referenceB.getAsCopy());
+				trail(referenceA);
+			} else {
+				referenceB.assign(referenceA.getAsCopy());
+				trail(referenceB);
+			}
+		} else {
+			throw RuntimeException("Tried to bind a non-tuple structure.", __FILENAME__, __func__, __LINE__);
+		}
 	}
 	
 	void unify(HeapReference& a, HeapReference& b) {
@@ -243,6 +263,7 @@ namespace Epilog {
 		std::string label = functor.toString();
 		if (Runtime::labels.find(label) != Runtime::labels.end()) {
 			Runtime::nextGoal = Runtime::nextInstruction + 1;
+			Runtime::currentNumberOfArguments = functor.parameters;
 			Runtime::nextInstruction = Runtime::labels[label];
 		} else {
 			throw UnificationError("Tried to jump to an inexistent label.", __FILENAME__, __func__, __LINE__);
@@ -254,17 +275,81 @@ namespace Epilog {
 	}
 	
 	void AllocateInstruction::execute() {
-		std::unique_ptr<Environment> frame(new Environment(Runtime::nextGoal));
+		std::unique_ptr<Environment> environment(new Environment(Runtime::nextGoal));
+		environment->previousEnvironment = Runtime::topEnvironment;
 		for (int i = 0; i < variables; ++ i) {
-			frame->variables.push_back(nullptr);
+			environment->variables.push_back(nullptr);
 		}
-		Runtime::environments.push(std::move(frame));
+		Runtime::topEnvironment = Runtime::stateStack.size();
+		Runtime::stateStack.push_back(std::move(environment));
 		++ Runtime::nextInstruction;
 	}
 	
 	void DeallocateInstruction::execute() {
-		std::unique_ptr<Environment>& frame = Runtime::environments.top();
-		Runtime::nextInstruction = frame->nextGoal;
-		Runtime::environments.pop();
+		Runtime::nextInstruction = Runtime::currentEnvironment()->nextGoal;
+		Runtime::popTopEnvironment();
+	}
+	
+	void unwindTrail(std::vector<HeapReference>::size_type from, std::vector<HeapReference>::size_type to) {
+		for (std::vector<HeapReference>::size_type i = from; i < to; ++ i) {
+			HeapTuple header(HeapTuple::Type::reference, Runtime::trail[i].index);
+			Runtime::trail[i].assign(header.copy());
+		}
+	}
+	
+	void TryInitialClauseInstruction::execute() {
+		if (Runtime::topEnvironment == -1UL) {
+			throw RuntimeException("Tried to try an intial clause with no environment.", __FILENAME__, __func__, __LINE__);
+		}
+		std::unique_ptr<ChoicePoint> choicePoint(new ChoicePoint(Runtime::topEnvironment, Runtime::nextGoal, label, Runtime::trail.size(), Runtime::heap.size()));
+		choicePoint->previousChoicePoint = Runtime::topChoicePoint;
+		choicePoint->environment = Runtime::topEnvironment;
+		// Initialise the arguments
+		for (int i = 0; i < Runtime::currentNumberOfArguments; ++ i) {
+			choicePoint->arguments.push_back(Runtime::registers[i]->copy());
+		}
+		Runtime::topChoicePoint = Runtime::stateStack.size();
+		Runtime::stateStack.push_back(std::move(choicePoint));
+		++ Runtime::nextInstruction;
+	}
+	
+	void TryIntermediateClauseInstruction::execute() {
+		ChoicePoint* choicePoint = Runtime::currentChoicePoint();
+		// Set the arguments from frame
+		for (HeapReference::heapIndex i = 0; i < choicePoint->arguments.size(); ++ i) {
+			Runtime::registers[i] = choicePoint->arguments[i]->copy();
+		}
+		// Set other variables
+		Runtime::topEnvironment = choicePoint->environment;
+		Runtime::compressStateStack();
+		Runtime::nextGoal = choicePoint->nextGoal;
+		choicePoint->nextClause = label;
+		unwindTrail(choicePoint->trailSize, Runtime::trail.size());
+		while (Runtime::trail.size() > choicePoint->trailSize) {
+			Runtime::trail.pop_back();
+		}
+		while (Runtime::heap.size() > choicePoint->heapSize) {
+			Runtime::heap.pop_back();
+		}
+		++ Runtime::nextInstruction;
+	}
+	
+	void TryFinalClauseInstruction::execute() {
+		ChoicePoint* choicePoint = Runtime::currentChoicePoint();
+		// Set the arguments from frame
+		for (HeapReference::heapIndex i = 0; i < choicePoint->arguments.size(); ++ i) {
+			Runtime::registers[i] = choicePoint->arguments[i]->copy();
+		}
+		// Set other variables
+		Runtime::nextGoal = choicePoint->nextGoal;
+		unwindTrail(choicePoint->trailSize, Runtime::trail.size());
+		while (Runtime::trail.size() > choicePoint->trailSize) {
+			Runtime::trail.pop_back();
+		}
+		while (Runtime::heap.size() > choicePoint->heapSize) {
+			Runtime::heap.pop_back();
+		}
+		Runtime::popTopChoicePoint();
+		++ Runtime::nextInstruction;
 	}
 }

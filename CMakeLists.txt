@@ -6,7 +6,6 @@ set(epilog_CXX_SRCS
 	# Compile the Pegmatite .cc files directly into the program (rather than creating a separate library).
 	lib/Pegmatite/ast.cc
 	lib/Pegmatite/parser.cc
-	src/compiler.cc
 	src/interpreter.cc
 	src/main.cc
 	src/runtime.cc

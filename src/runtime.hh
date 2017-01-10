@@ -21,7 +21,7 @@ namespace Epilog {
 		int line;
 		
 		void print() const {
-			std::cerr << file << " > " << function << "() (L" << line << "): " << message << std::endl;
+			std::cerr << "\t\t" << file << " > " << function << "() (L" << line << "): " << message << std::endl;
 		}
 		
 		RuntimeException(std::string message, std::string file, std::string function, int line) : message(message), file(file), function(function), line(line) { }
@@ -174,16 +174,37 @@ namespace Epilog {
 	struct Instruction {
 		POLYMORPHIC(Instruction);
 		
+		typedef typename BoundsCheckedVector<Instruction>::size_type instructionReference;
+		
 		virtual void execute() = 0;
 		
 		virtual std::string toString() const = 0;
 	};
 	
-	struct Environment {
-		BoundsCheckedVector<Instruction>::size_type nextGoal;
+	struct StateReference {
+		POLYMORPHIC(StateReference);
+		
+		typedef std::vector<std::unique_ptr<StateReference>>::size_type stateIndex;
+	};
+	
+	struct Environment: StateReference {
+		StateReference::stateIndex previousEnvironment;
+		Instruction::instructionReference nextGoal;
 		StackHeap variables;
 		
-		Environment(BoundsCheckedVector<Instruction>::size_type nextGoal) : nextGoal(nextGoal) {}
+		Environment(Instruction::instructionReference nextGoal) : nextGoal(nextGoal) {}
+	};
+	
+	struct ChoicePoint: StateReference {
+		StackHeap arguments;
+		StateReference::stateIndex environment;
+		Instruction::instructionReference nextGoal;
+		Instruction::instructionReference nextClause;
+		StateReference::stateIndex previousChoicePoint;
+		std::vector<HeapReference>::size_type trailSize;
+		HeapReference::heapIndex heapSize;
+		
+		ChoicePoint(StateReference::stateIndex environment, Instruction::instructionReference nextGoal, Instruction::instructionReference nextClause, std::stack<HeapReference>::size_type trailSize, HeapReference::heapIndex heapSize) : environment(environment), nextGoal(nextGoal), nextClause(nextClause), trailSize(trailSize), heapSize(heapSize) { }
 	};
 	
 	class Runtime {
@@ -197,15 +218,53 @@ namespace Epilog {
 		// The instructions corresponding to the compiled program
 		static BoundsCheckedVector<Instruction> instructions;
 		
-		// The environment stack used to store variable bindings
-		static std::stack<std::unique_ptr<Environment>> environments;
+		// The stack used to store variable bindings and choice points
+		static std::vector<std::unique_ptr<StateReference>> stateStack;
+		
+		static void compressStateStack() {
+			// At the moment, the stack currently continues growing as more environments and choice points are added.
+			// The stack should instead be overwritten, so that it grows only as much as is necessary.
+		}
+		
+		static StateReference::stateIndex topEnvironment;
+		static Environment* currentEnvironment() {
+			if (Environment* environment = dynamic_cast<Environment*>(stateStack[topEnvironment].get())) {
+				return environment;
+			} else {
+				throw RuntimeException("Tried to access a choice point as an environment.", __FILENAME__, __func__, __LINE__);
+			}
+		}
+		static void popTopEnvironment() {
+			topEnvironment = currentEnvironment()->previousEnvironment;
+			compressStateStack();
+		}
+		
+		static std::vector<std::shared_ptr<StateReference>>::size_type topChoicePoint;
+		static ChoicePoint* currentChoicePoint() {
+			if (ChoicePoint* choicePoint = dynamic_cast<ChoicePoint*>(stateStack[topChoicePoint].get())) {
+				return choicePoint;
+			} else {
+				throw RuntimeException("Tried to access an environment as a choice point.", __FILENAME__, __func__, __LINE__);
+			}
+		}
+		static void popTopChoicePoint() {
+			ChoicePoint* choicePoint = currentChoicePoint();
+			topEnvironment = choicePoint->environment;
+			topChoicePoint = choicePoint->previousChoicePoint;
+			compressStateStack();
+		}
+		
+		static int currentNumberOfArguments;
+		
+		// The stack used to contain the variables to unbind when backtracking
+		static std::vector<HeapReference> trail;
 		
 		// Labels with which a particular instruction can be jumped to
-		static std::unordered_map<std::string, BoundsCheckedVector<Instruction>::size_type> labels;
+		static std::unordered_map<std::string, Instruction::instructionReference> labels;
 		
-		static BoundsCheckedVector<Instruction>::size_type nextInstruction;
+		static Instruction::instructionReference nextInstruction;
 		
-		static BoundsCheckedVector<Instruction>::size_type nextGoal;
+		static Instruction::instructionReference nextGoal;
 		
 		static Mode mode;
 		
@@ -375,6 +434,38 @@ namespace Epilog {
 		
 		virtual std::string toString() const override {
 			return "deallocate";
+		}
+	};
+	
+	struct TryInitialClauseInstruction: Instruction {
+		Instruction::instructionReference label;
+		
+		TryInitialClauseInstruction(Instruction::instructionReference label) : label(label) { }
+		
+		virtual void execute() override;
+		
+		virtual std::string toString() const override {
+			return "try_me_else";
+		}
+	};
+	
+	struct TryIntermediateClauseInstruction: Instruction {
+		Instruction::instructionReference label;
+		
+		TryIntermediateClauseInstruction(Instruction::instructionReference label) : label(label) { }
+		
+		virtual void execute() override;
+		
+		virtual std::string toString() const override {
+			return "retry_me_else";
+		}
+	};
+	
+	struct TryFinalClauseInstruction: Instruction {
+		virtual void execute() override;
+		
+		virtual std::string toString() const override {
+			return "trust_me";
 		}
 	};
 }
