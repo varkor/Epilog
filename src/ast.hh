@@ -1,7 +1,6 @@
-#include <functional>
 #include <iostream>
 #include <unordered_set>
-#include "../lib/Pegmatite/ast.hh"
+#include "Pegmatite/ast.hh"
 #include "runtime.hh"
 #include "interpreter.hh"
 
@@ -9,16 +8,7 @@ namespace Compiler {
 	class Context;
 }
 
-namespace llvm {
-	class Value;
-}
-
 namespace AST {
-	using pegmatite::ASTPtr;
-	using pegmatite::ASTChild;
-	using pegmatite::ASTList;
-	using pegmatite::ErrorReporter;
-	
 	// Abstract superclass for all terms.
 	class Term: public pegmatite::ASTContainer {
 		public:
@@ -73,7 +63,7 @@ namespace AST {
 	class Clauses: public pegmatite::ASTContainer {
 		pegmatite::ASTList<Clause> clauses;
 		public:
-		virtual void interpret(Interpreter::Context& context);
+		void interpret(Interpreter::Context& context);
 	};
 	
 	class Variable: public Term {
@@ -94,7 +84,7 @@ namespace AST {
 			return std::to_string(value);
 		}
 		
-		bool construct(const pegmatite::InputRange &range, pegmatite::ASTStack &stack, const ErrorReporter&) override {
+		bool construct(const pegmatite::InputRange &range, pegmatite::ASTStack &stack, const pegmatite::ErrorReporter&) override {
 			pegmatite::constructValue(range, value);
 			return true;
 		}

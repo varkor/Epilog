@@ -1,4 +1,4 @@
-#include "../lib/Pegmatite/pegmatite.hh"
+#include "Pegmatite/pegmatite.hh"
 
 namespace Parser {
 	using pegmatite::Rule;
@@ -8,10 +8,8 @@ namespace Parser {
 	using pegmatite::BindAST;
 	using pegmatite::any;
 	using pegmatite::nl;
-	using pegmatite::trace;
 	
 	struct EpilogGrammar {
-		
 		// Whitespace: spaces, tabs and newline characters.
 		Rule whitespace = ' '_E | '\t' | nl('\n');
 		

@@ -9,13 +9,13 @@ void usage(const char command[]) {
 	std::cerr << "usage: " << command << " <file>" << std::endl;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
 	if (argc < 2) {
 		usage(argv[0]);
 		
 		return EXIT_FAILURE;
 	} else {
-		Parser::EpilogParser<int> parser;
+		Parser::EpilogParser parser;
 		Interpreter::Context context;
 		std::unique_ptr<AST::Clauses> root;
 		pegmatite::AsciiFileInput input(open(argv[1], O_RDONLY));

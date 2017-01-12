@@ -2,7 +2,6 @@
 #include "ast.hh"
 
 namespace Parser {
-	template<typename T>
 	class EpilogParser: public pegmatite::ASTParserDelegate {
 		BindAST<AST::Clauses> clauses = EpilogGrammar::get().clauses;
 		BindAST<AST::Identifier> identifier = EpilogGrammar::get().identifier;
