@@ -5,6 +5,8 @@
 #include "parser.hh"
 #include "runtime.hh"
 
+using namespace Epilog;
+
 void usage(const char command[]) {
 	std::cerr << "usage: " << command << " <file>" << std::endl;
 }
