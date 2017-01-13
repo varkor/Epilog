@@ -28,7 +28,7 @@ int main(int argc, char* argv[]) {
 			} catch (const Epilog::UnificationError& error) {
 				std::cout << "false." << std::endl;
 				return EXIT_FAILURE;
-			} catch (const Epilog::RuntimeException& exception) {
+			} catch (const Epilog::Exception& exception) {
 				exception.print();
 				return EXIT_FAILURE;
 			}

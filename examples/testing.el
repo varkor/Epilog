@@ -7,4 +7,4 @@ ternary(one, two, three).
 % A compound fact
 top(middle(bottom, bottom), bottom).
 % A simple rule
-rule(one, Two, 3) :- fact(Two).
+rule(one, Two, a) :- fact(Two).

@@ -1,1 +1,1 @@
-? :- write("Hello, world!"), nl.
+?- write('Hello, world!'), nl.

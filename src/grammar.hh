@@ -17,7 +17,7 @@ namespace Epilog {
 			// Comments: line and block.
 			Rule comment =
 			("/*"_E >> *(!ExprPtr("*/") >> (nl('\n') | any())) >> "*/") | // Block comment.
-			"%"_E >> *(!ExprPtr("\n") >> any()) >> nl('\n'); // Line comment.
+			'%'_E >> *(!ExprPtr('\n') >> any()) >> nl('\n'); // Line comment.
 			
 			Rule ignored = *(comment | whitespace);
 			
@@ -38,7 +38,7 @@ namespace Epilog {
 			Rule number = +digit;
 			
 			// Identifiers: names (for example, for facts or rules).
-			Rule identifier = pegmatite::term(lowercase >> *character);
+			Rule identifier = (pegmatite::term(lowercase >> *character)) | ('\'' >> *("\\'" | (!ExprPtr('\'') >> any())) >> '\'');
 			
 			Rule variableIdentifier = pegmatite::term((uppercase | '_') >> *character);
 			
@@ -51,7 +51,7 @@ namespace Epilog {
 			// Parameters: a comma-separated list of terms.
 			Rule parameter = term;
 			
-			Rule parameters = -("(" >> -(parameter >> *(',' >> parameter)) >> ")");
+			Rule parameters = -('(' >> -(parameter >> *(',' >> parameter)) >> ')');
 			
 			// Compound term: a name optionally followed by an argument list.
 			// A set of empty brackets `()` is equivalent to having no brackets at all.

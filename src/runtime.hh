@@ -13,7 +13,10 @@
 	class& operator=(const class& other) = default;
 
 namespace Epilog {
-	class RuntimeException {
+	class Exception {
+		protected:
+		int indentation;
+		
 		public:
 		std::string message;
 		std::string file;
@@ -21,10 +24,20 @@ namespace Epilog {
 		int line;
 		
 		void print() const {
-			std::cerr << "\t\t" << file << " > " << function << "() (L" << line << "): " << message << std::endl;
+			std::cerr << std::string(indentation, '\t') << file << " > " << function << "() (L" << line << "): " << message << std::endl;
 		}
 		
-		RuntimeException(std::string message, std::string file, std::string function, int line) : message(message), file(file), function(function), line(line) { }
+		Exception(std::string message, std::string file, std::string function, int line, int indentation = 0) : indentation(indentation), message(message), file(file), function(function), line(line) { }
+	};
+	
+	class CompilationException: public Exception {
+		public:
+		CompilationException(std::string message, std::string file, std::string function, int line) : Exception(message, file, function, line, 1) { }
+	};
+	
+	class RuntimeException: public Exception {
+		public:
+		RuntimeException(std::string message, std::string file, std::string function, int line) : Exception(message, file, function, line, 2) { }
 	};
 	
 	class UnificationError: public RuntimeException {
@@ -466,6 +479,18 @@ namespace Epilog {
 		
 		virtual std::string toString() const override {
 			return "trust_me";
+		}
+	};
+	
+	struct CommandInstruction: Instruction {
+		std::string function;
+		
+		CommandInstruction(std::string function) : function(function) { }
+		
+		virtual void execute() override;
+		
+		virtual std::string toString() const override {
+			return "command " + function;
 		}
 	};
 }

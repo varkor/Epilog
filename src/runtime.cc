@@ -5,6 +5,17 @@
 #include "runtime.hh"
 
 namespace Epilog {
+	namespace StandardLibrary {
+		std::unordered_map<std::string, std::function<void()>> commands = {
+			{ "nl", [] {
+				std::cout << std::endl;
+			} },
+			{ "print", [] {
+				std::cout << Runtime::registers[0]->trace();
+			} }
+		};
+	}
+	
 	StackHeap Runtime::heap;
 	StackHeap Runtime::registers;
 	BoundsCheckedVector<Instruction> Runtime::instructions;
@@ -350,6 +361,15 @@ namespace Epilog {
 			Runtime::heap.pop_back();
 		}
 		Runtime::popTopChoicePoint();
+		++ Runtime::nextInstruction;
+	}
+	
+	void CommandInstruction::execute() {
+		if (StandardLibrary::commands.find(function) != StandardLibrary::commands.end()) {
+			StandardLibrary::commands[function]();
+		} else {
+			throw RuntimeException("Tried to execute an unknown command.", __FILENAME__, __func__, __LINE__);
+		}
 		++ Runtime::nextInstruction;
 	}
 }
