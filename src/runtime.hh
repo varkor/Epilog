@@ -57,7 +57,7 @@ namespace Epilog {
 			return "container";
 		}
 		
-		virtual std::string trace() const = 0;
+		virtual std::string trace(bool explicitControlCharacters = false) const = 0;
 	};
 	
 	enum class StorageArea { heap, reg, environment, undefined };
@@ -124,7 +124,7 @@ namespace Epilog {
 			return std::string("(") + (type == Type::compoundTerm ? "compound term" : "reference") + ", " + std::to_string(reference) + ")";
 		}
 		
-		virtual std::string trace() const override;
+		virtual std::string trace(bool explicitControlCharacters = false) const override;
 		
 		HeapTuple(Type type, HeapReference::heapIndex reference) : type(type), reference(reference) { }
 	};
@@ -141,7 +141,10 @@ namespace Epilog {
 			return name + "/" + std::to_string(parameters);
 		}
 		
-		virtual std::string trace() const override {
+		virtual std::string trace(bool explicitControlCharacters = false) const override {
+			if (!explicitControlCharacters && name.length() > 2 && name[0] == '\'') {
+				return name.substr(1, name.length() - 2);
+			}
 			return name;
 		}
 		
@@ -322,10 +325,10 @@ namespace Epilog {
 	};
 	
 	struct UnifyCompoundTermInstruction: Instruction {
-		const HeapFunctor functor;
+		HeapFunctor functor;
 		HeapReference registerReference;
 		
-		UnifyCompoundTermInstruction(const HeapFunctor functor, HeapReference registerReference) : functor(functor), registerReference(registerReference) { }
+		UnifyCompoundTermInstruction(HeapFunctor functor, HeapReference registerReference) : functor(functor), registerReference(registerReference) { }
 		
 		virtual void execute() override;
 		

@@ -38,7 +38,9 @@ namespace Epilog {
 			Rule number = +digit;
 			
 			// Identifiers: names (for example, for facts or rules).
-			Rule identifier = (pegmatite::term(lowercase >> *character)) | ('\'' >> *("\\'" | (!ExprPtr('\'') >> any())) >> '\'');
+			Rule simpleIdentifier = pegmatite::term(lowercase >> *character);
+			
+			Rule identifier = simpleIdentifier | ('\'' >> *("\\'" | (!ExprPtr('\'') >> any())) >> '\'');
 			
 			Rule variableIdentifier = pegmatite::term((uppercase | '_') >> *character);
 			

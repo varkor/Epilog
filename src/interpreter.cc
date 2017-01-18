@@ -10,6 +10,39 @@
 #endif
 
 namespace Epilog {
+	void pushInstruction(Interpreter::Context& context, Instruction* instruction) {
+		if (instruction != nullptr) {
+			Runtime::instructions.insert(Runtime::instructions.begin() + (context.insertionAddress ++), std::unique_ptr<Instruction>(instruction));
+		}
+	}
+	
+	std::unordered_map<std::string, std::function<void(Interpreter::Context& context)>> StandardLibrary::functions = {
+		{ "nl/0", [] (Interpreter::Context& context) {
+			pushInstruction(context, new CommandInstruction("nl"));
+			pushInstruction(context, new ProceedInstruction());
+		} },
+		{ "write/1", [] (Interpreter::Context& context) {
+			pushInstruction(context, new CommandInstruction("print"));
+			pushInstruction(context, new ProceedInstruction());
+		} },
+		{ "true/0", [] (Interpreter::Context& context) {
+			pushInstruction(context, new ProceedInstruction());
+		} },
+		{ "fail/0", [] (Interpreter::Context& context) {
+			// This call instruction will always fail, so there is no need for a following proceed instruction.
+			pushInstruction(context, new CallInstruction(HeapFunctor("", 0)));
+		} }
+	};
+	
+	std::unordered_map<std::string, std::function<void()>> StandardLibrary::commands = {
+		{ "nl", [] {
+			std::cout << std::endl;
+		} },
+		{ "print", [] {
+			std::cout << Runtime::registers[0]->trace();
+		} }
+	};
+	
 	namespace AST {
 		struct TermNode {
 			Term* term;

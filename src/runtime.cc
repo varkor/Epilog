@@ -3,19 +3,10 @@
 #include <string>
 #include <stack>
 #include "runtime.hh"
+#include "interpreter.hh"
+#include "standardlibrary.hh"
 
 namespace Epilog {
-	namespace StandardLibrary {
-		std::unordered_map<std::string, std::function<void()>> commands = {
-			{ "nl", [] {
-				std::cout << std::endl;
-			} },
-			{ "print", [] {
-				std::cout << Runtime::registers[0]->trace();
-			} }
-		};
-	}
-	
 	StackHeap Runtime::heap;
 	StackHeap Runtime::registers;
 	BoundsCheckedVector<Instruction> Runtime::instructions;
@@ -59,22 +50,22 @@ namespace Epilog {
 		}
 	}
 	
-	std::string HeapTuple::trace() const {
+	std::string HeapTuple::trace(bool explicitControlCharacters) const {
 		switch (type) {
 			case Type::compoundTerm: {
 				if (HeapFunctor* functor = dynamic_cast<HeapFunctor*>(Runtime::heap[reference].get())) {
 					std::string parameters = "";
 					for (int i = 0; i < functor->parameters; ++ i) {
-						parameters += (i > 0 ? "," : "") + Runtime::heap[reference + (i + 1)]->trace();
+						parameters += (i > 0 ? "," : "") + Runtime::heap[reference + (i + 1)]->trace(explicitControlCharacters);
 					}
-					return Runtime::heap[reference]->trace() + (functor->parameters > 0 ? "(" + parameters + ")" : "");
+					return Runtime::heap[reference]->trace(explicitControlCharacters) + (functor->parameters > 0 ? "(" + parameters + ")" : "");
 				} else {
 					throw RuntimeException("Dereferenced a structure that did not point to a functor.", __FILENAME__, __func__, __LINE__);
 				}
 			}
 			case Type::reference: {
 				if (Runtime::heap[reference].get() != this) {
-					return Runtime::heap[reference]->trace();
+					return Runtime::heap[reference]->trace(explicitControlCharacters);
 				} else {
 					return "_";
 				}

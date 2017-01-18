@@ -15,7 +15,7 @@ namespace Epilog {
 		class Context {
 			public:
 			std::unordered_map<std::string, FunctorClause> functorClauses;
-			Instruction::instructionReference insertionAddress;
+			Instruction::instructionReference insertionAddress = 0;
 		};
 	}
 }

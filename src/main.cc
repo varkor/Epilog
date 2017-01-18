@@ -18,11 +18,11 @@ int main(int argc, char* argv[]) {
 		return EXIT_FAILURE;
 	} else {
 		Parser::EpilogParser parser;
-		Interpreter::Context context;
 		std::unique_ptr<AST::Clauses> root;
 		pegmatite::AsciiFileInput input(open(argv[1], O_RDONLY));
 		if (parser.parse(input, parser.grammar.clauses, parser.grammar.ignored, pegmatite::defaultErrorReporter, root)) {
 			try {
+				Interpreter::Context context;
 				root->interpret(context);
 				std::cout << "true." << std::endl;
 			} catch (const Epilog::UnificationError& error) {

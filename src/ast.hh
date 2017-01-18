@@ -5,6 +5,10 @@
 #include "interpreter.hh"
 
 namespace Epilog {
+	namespace Parser {
+		class EpilogParser;
+	}
+	
 	namespace AST {
 		// Abstract superclass for all terms.
 		class Term: public pegmatite::ASTContainer {
@@ -12,7 +16,10 @@ namespace Epilog {
 			virtual std::string toString() const = 0;
 		};
 		
-		class Identifier: public pegmatite::ASTString { };
+		class Identifier: public pegmatite::ASTString {
+			public:
+			bool construct(const pegmatite::InputRange& range, pegmatite::ASTStack& stack, const pegmatite::ErrorReporter& errorReporter) override;
+		};
 		
 		class VariableIdentifier: public pegmatite::ASTString { };
 		
