@@ -25,6 +25,11 @@ namespace Epilog {
 			pushInstruction(context, new CommandInstruction("print"));
 			pushInstruction(context, new ProceedInstruction());
 		} },
+		{ "writeln/1", [] (Interpreter::Context& context) {
+			pushInstruction(context, new CommandInstruction("print"));
+			pushInstruction(context, new CommandInstruction("nl"));
+			pushInstruction(context, new ProceedInstruction());
+		} },
 		{ "true/0", [] (Interpreter::Context& context) {
 			pushInstruction(context, new ProceedInstruction());
 		} },
@@ -157,6 +162,9 @@ namespace Epilog {
 							terms.push(std::shared_ptr<TermNode>(new TermNode(node->term, node)));
 						}
 					}
+				} else if (Number* number = dynamic_cast<Number*>(term)) {
+					node->name = number->toString();
+					node->symbol = node->name;
 				} else {
 					throw CompilationException("Found a term of an unknown type in the query.", __FILENAME__, __func__, __LINE__);
 				}
@@ -251,6 +259,11 @@ namespace Epilog {
 					}
 					while (!reverse.empty()) {
 						terms.push_front(reverse.top()); reverse.pop();
+					}
+				} else if (dynamic_cast<Number*>(node->term)) {
+					if (parent != nullptr) {
+						pushInstruction(context, compoundTerm(node, allocations));
+						encounters.insert(node->symbol);
 					}
 				} else {
 					throw CompilationException("Found a term of an unknown type in the query.", __FILENAME__, __func__, __LINE__);

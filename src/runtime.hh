@@ -143,7 +143,13 @@ namespace Epilog {
 		
 		virtual std::string trace(bool explicitControlCharacters = false) const override {
 			if (!explicitControlCharacters && name.length() > 2 && name[0] == '\'') {
-				return name.substr(1, name.length() - 2);
+				std::string unquoted = name.substr(1, name.length() - 2);
+				std::string::size_type position = 0;
+				while ((position = unquoted.find("\\'", position)) != std::string::npos) {
+					unquoted.replace(position, 2, "'");
+					position += 1;
+				}
+				return unquoted;
 			}
 			return name;
 		}
