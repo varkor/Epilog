@@ -8,3 +8,6 @@ ternary(one, two, three).
 top(middle(bottom, bottom), bottom).
 % A simple rule
 rule(one, Two, a) :- fact(Two).
+% A rule involving a list
+length([], 0).
+length([H | T], N) :- length(T, M), is(N, +(M, 1)).

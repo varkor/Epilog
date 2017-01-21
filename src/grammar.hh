@@ -38,17 +38,22 @@ namespace Epilog {
 			Rule number = +digit;
 			
 			// Identifiers: names (for example, for facts or rules).
-			Rule simpleIdentifier = pegmatite::term(lowercase >> *character);
+			Rule simpleIdentifier = pegmatite::term(lowercase >> *character) | ".+"_S | "[]";
 			
 			Rule identifier = simpleIdentifier | ('\'' >> *("\\'" | (!ExprPtr('\'') >> any())) >> '\'');
 			
 			Rule variableIdentifier = pegmatite::term((uppercase | '_') >> *character);
 			
-			// Variable.
+			// Variables.
 			Rule variable = variableIdentifier;
 			
-			// Term.
-			Rule term = compoundTerm | variable | number;
+			// List literals.
+			Rule elements = term >> *(',' >> term);
+			
+			Rule list = '['_E >> elements >> -('|' >> term) >> ']';
+			
+			// Terms.
+			Rule term = compoundTerm | variable | number | list;
 			
 			// Parameters: a comma-separated list of terms.
 			Rule parameter = term;

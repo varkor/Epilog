@@ -93,7 +93,7 @@ namespace Epilog {
 		++ Runtime::nextInstruction;
 	}
 	
-	HeapReference& dereference(HeapReference& reference) {
+	HeapReference dereference(const HeapReference& reference) {
 		if (HeapTuple* value = dynamic_cast<HeapTuple*>(reference.getPointer())) {
 			HeapTuple::Type type = value->type;
 			HeapReference::heapIndex next = value->reference;
@@ -136,20 +136,20 @@ namespace Epilog {
 		pushdownList.push(a);
 		pushdownList.push(b);
 		while (!pushdownList.empty()) {
-			HeapReference& d1 = dereference(pushdownList.top()); pushdownList.pop();
-			HeapReference& d2 = dereference(pushdownList.top()); pushdownList.pop();
+			HeapReference d1 = dereference(pushdownList.top()); pushdownList.pop();
+			HeapReference d2 = dereference(pushdownList.top()); pushdownList.pop();
 			// Force unification to occur if both values are compound terms placed in registers
 			if (d1 != d2) {
 				HeapTuple* value1 = dynamic_cast<HeapTuple*>(d1.getPointer());
 				HeapTuple* value2 = dynamic_cast<HeapTuple*>(d2.getPointer());
 				if (value1 && value2) {
 					HeapTuple::Type t1 = value1->type;
-					HeapReference::heapIndex v1 = value1->reference;
 					HeapTuple::Type t2 = value2->type;
-					HeapReference::heapIndex v2 = value2->reference;
 					if (t1 == HeapTuple::Type::reference || t2 == HeapTuple::Type::reference) {
 						bind(d1, d2);
 					} else {
+						HeapReference::heapIndex v1 = value1->reference;
+						HeapReference::heapIndex v2 = value2->reference;
 						HeapFunctor* fn1 = dynamic_cast<HeapFunctor*>(Runtime::heap[v1].get());
 						HeapFunctor* fn2 = dynamic_cast<HeapFunctor*>(Runtime::heap[v2].get());
 						if (fn1 && fn2) {

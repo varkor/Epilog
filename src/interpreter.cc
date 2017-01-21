@@ -16,35 +16,92 @@ namespace Epilog {
 		}
 	}
 	
-	std::unordered_map<std::string, std::function<void(Interpreter::Context& context)>> StandardLibrary::functions = {
-		{ "nl/0", [] (Interpreter::Context& context) {
+	std::unordered_map<std::string, std::function<void(Interpreter::Context& context, HeapReference::heapIndex& registers)>> StandardLibrary::functions = {
+		{ "./2", [] (Interpreter::Context& context, HeapReference::heapIndex& registers) {
+			pushInstruction(context, new CommandInstruction("exception"));
+		} },
+		{ "[]/0", [] (Interpreter::Context& context, HeapReference::heapIndex& registers) {
+			pushInstruction(context, new CommandInstruction("exception"));
+		} },
+		{ "is/2", [] (Interpreter::Context& context, HeapReference::heapIndex& registers) {
+			pushInstruction(context, new CommandInstruction("evaluate"));
+			pushInstruction(context, new PushCompoundTermInstruction(HeapFunctor("<dynamic_term>", 0), HeapReference(StorageArea::reg, 1)));
+			pushInstruction(context, new UnifyRegisterAndArgumentInstruction(HeapReference(StorageArea::reg, 0), HeapReference(StorageArea::reg, 1)));
+			pushInstruction(context, new ProceedInstruction());
+			registers = 2;
+		} },
+		{ "nl/0", [] (Interpreter::Context& context, HeapReference::heapIndex& registers) {
 			pushInstruction(context, new CommandInstruction("nl"));
 			pushInstruction(context, new ProceedInstruction());
 		} },
-		{ "write/1", [] (Interpreter::Context& context) {
+		{ "write/1", [] (Interpreter::Context& context, HeapReference::heapIndex& registers) {
 			pushInstruction(context, new CommandInstruction("print"));
 			pushInstruction(context, new ProceedInstruction());
 		} },
-		{ "writeln/1", [] (Interpreter::Context& context) {
+		{ "writeln/1", [] (Interpreter::Context& context, HeapReference::heapIndex& registers) {
 			pushInstruction(context, new CommandInstruction("print"));
 			pushInstruction(context, new CommandInstruction("nl"));
 			pushInstruction(context, new ProceedInstruction());
 		} },
-		{ "true/0", [] (Interpreter::Context& context) {
+		{ "true/0", [] (Interpreter::Context& context, HeapReference::heapIndex& registers) {
 			pushInstruction(context, new ProceedInstruction());
 		} },
-		{ "fail/0", [] (Interpreter::Context& context) {
+		{ "fail/0", [] (Interpreter::Context& context, HeapReference::heapIndex& registers) {
 			// This call instruction will always fail, so there is no need for a following proceed instruction.
 			pushInstruction(context, new CallInstruction(HeapFunctor("", 0)));
 		} }
 	};
 	
+	int64_t evaluateCompoundTerm(HeapReference reference) {
+		HeapContainer* container = reference.getPointer();
+		if (HeapTuple* tuple = dynamic_cast<HeapTuple*>(container)) {
+			if (tuple->type == HeapTuple::Type::compoundTerm) {
+				return evaluateCompoundTerm(HeapReference(StorageArea::heap, tuple->reference));
+			} else {
+				throw RuntimeException("Tried to evaluate an unbound variable.", __FILENAME__, __func__, __LINE__);
+			}
+		} else if (HeapFunctor* functor = dynamic_cast<HeapFunctor*>(container)) {
+			std::string& name = functor->name;
+			if (name == "+" && functor->parameters > 1) {
+				int64_t sum = 0;
+				for (int i = 0; i < functor->parameters; ++ i) {
+					sum += evaluateCompoundTerm(dereference(HeapReference(StorageArea::heap, reference.index + (i + 1))));
+				}
+				return sum;
+			}
+			size_t length;
+			int64_t value = std::stoll(name, &length);
+			if (length == 0 || length < name.length()) {
+				throw RuntimeException("Tried to evaluate a functor that is neither an integer nor a recognised operation.", __FILENAME__, __func__, __LINE__);
+			}
+			return value;
+		} else {
+			throw RuntimeException("Tried to evaluate an unknown container.", __FILENAME__, __func__, __LINE__);
+		}
+	}
+	
 	std::unordered_map<std::string, std::function<void()>> StandardLibrary::commands = {
+		{ "exception", [] {
+			throw RuntimeException("Tried to call a non-callable term.", __FILENAME__, __func__, __LINE__);
+		} },
 		{ "nl", [] {
 			std::cout << std::endl;
 		} },
 		{ "print", [] {
 			std::cout << Runtime::registers[0]->trace();
+		} },
+		{ "evaluate", [] {
+			HeapTuple* tuple;
+			if ((tuple = dynamic_cast<HeapTuple*>(Runtime::registers[1].get()))) {
+				if (PushCompoundTermInstruction* instruction = dynamic_cast<PushCompoundTermInstruction*>(Runtime::instructions[Runtime::nextInstruction + 1].get())) {
+					instruction->functor.name = std::to_string(evaluateCompoundTerm(dereference(HeapReference(StorageArea::reg, 1))));
+					return;
+				} else {
+					throw ::Epilog::RuntimeException("Tried to evaluate a compound term without then pushing it to a register.", __FILENAME__, __func__, __LINE__);
+				}
+			} else {
+				throw RuntimeException("Tried to evaluate the value of a non-tuple address.", __FILENAME__, __func__, __LINE__);
+			}
 		} }
 	};
 	
@@ -64,24 +121,26 @@ namespace Epilog {
 			for (auto& child : current->children) {
 				topologicalSort(allocations, child);
 			}
-			if (current->parent != nullptr && (current->parent->parent == nullptr || dynamic_cast<CompoundTerm*>(current->term))) {
+			if (current->parent != nullptr && (current->parent->parent == nullptr || (dynamic_cast<CompoundTerm*>(current->term) || dynamic_cast<Number*>(current->term)))) {
 				allocations.push_back(current);
 			}
 		}
 		
 		std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> findVariablePermanence(CompoundTerm* head, pegmatite::ASTList<CompoundTerm>* goals, bool forcePermanence) {
 			std::unordered_map<std::string, int> appearances;
+			std::queue<CompoundTerm*> clauses;
 			std::queue<Term*> terms;
 			if (head != nullptr) {
-				terms.push(head);
+				clauses.push(head);
 			}
-			pegmatite::ASTList<CompoundTerm> emptyBody;
-			if (goals == nullptr) {
-				goals = &emptyBody;
+			if (goals != nullptr) {
+				for (std::unique_ptr<CompoundTerm>& goal : *goals) {
+					clauses.push(goal.get());
+				}
 			}
-			for (std::unique_ptr<CompoundTerm>& goal : *goals) {
+			while (!clauses.empty()) {
 				std::unordered_set<std::string> variables;
-				terms.push(goal.get());
+				terms.push(clauses.front()); clauses.pop();
 				while (!terms.empty()) {
 					Term* term = terms.front(); terms.pop();
 					if (CompoundTerm* compoundTerm = dynamic_cast<CompoundTerm*>(term)) {
@@ -99,7 +158,6 @@ namespace Epilog {
 					++ appearances[symbol];
 				}
 			}
-			
 			std::unordered_set<std::string> temporaries;
 			std::unordered_map<std::string, HeapReference> permanents;
 			HeapReference::heapIndex index = 0;
@@ -181,11 +239,58 @@ namespace Epilog {
 			return std::make_tuple(root, registers, allocations);
 		}
 		
-		void printHeap() {
-			std::cerr << "Stack (" << Runtime::heap.size() << "):" << std::endl;
+		void printMemory() {
+			std::cerr << "Stack (" << Runtime::heap.size() << "):" << (Runtime::heap.size() > 0 ? "" : " (None)") << std::endl;
 			Runtime::heap.print();
-			std::cerr << "Registers (" << Runtime::registers.size() << "):" << std::endl;
+			std::cerr << "Registers (" << Runtime::registers.size() << "):" << (Runtime::registers.size() > 0 ? "" : " (None)") << std::endl;
 			Runtime::registers.print();
+		}
+		
+		std::unique_ptr<CompoundTerm> createListWrapper(bool empty = false) {
+			std::unique_ptr<CompoundTerm> wrapper(new CompoundTerm());
+			wrapper->name.std::string::operator=(!empty ? "." : "[]"); // Special symbols for lists.
+			wrapper->parameterList.reset(new ParameterList());
+			return wrapper;
+		}
+		
+		void removeSyntacticSugar(CompoundTerm* clause) {
+			if (clause == nullptr) {
+				return;
+			}
+			std::stack<std::pair<Term*, pegmatite::ASTList<Term>::iterator>> terms;
+			terms.push(std::make_pair(clause, pegmatite::ASTList<Term>::iterator()));
+			while (!terms.empty()) {
+				auto& pair = terms.top(); terms.pop();
+				Term* term = pair.first;
+				if (CompoundTerm* compoundTerm = dynamic_cast<CompoundTerm*>(term)) {
+					for (auto it = compoundTerm->parameterList->parameters.begin(); it != compoundTerm->parameterList->parameters.end(); ++ it) {
+						terms.push(std::make_pair(it->get(), it));
+					}
+				} else if (List* list = dynamic_cast<List*>(term)) {
+					// List literals are replaced with equivalent compound terms before any analysis is done.
+					pegmatite::ASTList<Term>::iterator& it = pair.second;
+					std::unique_ptr<CompoundTerm> expansion = createListWrapper();
+					CompoundTerm* current = nullptr;
+					for (auto& element : list->elementList->elements) {
+						if (current != nullptr) {
+							auto wrapper = createListWrapper();
+							CompoundTerm* next = wrapper.get();
+							current->parameterList->parameters.push_back(std::move(wrapper));
+							current = next;
+						} else {
+							current = expansion.get();
+						}
+						current->parameterList->parameters.push_back(std::move(element));
+					}
+					if (list->tail != nullptr) {
+						current->parameterList->parameters.push_back(std::move(list->tail));
+					} else {
+						current->parameterList->parameters.push_back(createListWrapper(true));
+					}
+					*it = std::move(expansion);
+				}
+				// All other terms can be ignored as there is no syntactic sugar applicable to them.
+			}
 		}
 		
 		typedef typename std::function<Instruction*(std::shared_ptr<TermNode>, std::unordered_map<std::string, HeapReference>&)> instructionGenerator;
@@ -248,7 +353,7 @@ namespace Epilog {
 						encounters.insert(node->symbol);
 					}
 					for (std::shared_ptr<TermNode> child : node->children) {
-						if (parent != nullptr && dynamic_cast<CompoundTerm*>(child->term)) {
+						if (parent != nullptr && (dynamic_cast<CompoundTerm*>(child->term) || dynamic_cast<Number*>(child->term))) {
 							if (!dependentAllocations) {
 								terms.push_back(std::make_pair(child, false));
 							}
@@ -276,13 +381,19 @@ namespace Epilog {
 		
 		void Clauses::interpret(Interpreter::Context& context) {
 			// Set up the built-in functions
+			HeapReference::heapIndex maximumRegisters = 0;
 			for (auto& pair : StandardLibrary::functions) {
 				const std::string& symbol = pair.first;
 				if (DEBUG) {
 					std::cerr << "Register built-in function: " << symbol << std::endl;
 				}
 				Runtime::labels[symbol] = context.insertionAddress;
-				pair.second(context);
+				HeapReference::heapIndex registers = 0;
+				pair.second(context, registers);
+				maximumRegisters = std::max(maximumRegisters, registers);
+			}
+			while (Runtime::registers.size() < maximumRegisters) {
+				Runtime::registers.push_back(nullptr);
 			}
 			if (DEBUG) {
 				std::cerr << std::endl;
@@ -322,6 +433,14 @@ namespace Epilog {
 		}
 		
 		std::pair<BoundsCheckedVector<Instruction>::size_type, std::unordered_map<std::string, HeapReference>> generateInstructionsForRule(Interpreter::Context& context, CompoundTerm* head, pegmatite::ASTList<CompoundTerm>* goals) {
+			// Replace syntactic sugar in each of the clauses with its expanded form.
+			removeSyntacticSugar(head);
+			if (goals != nullptr) {
+				for (auto it = goals->begin(); it != goals->end(); ++ it) {
+					removeSyntacticSugar(it->get());
+				}
+			}
+			
 			auto permanence = findVariablePermanence(head, goals, head == nullptr);
 			auto startAddress = context.insertionAddress = Runtime::instructions.size();
 			

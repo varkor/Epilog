@@ -1,4 +1,5 @@
 #include <iostream>
+#include <list>
 #include <unordered_set>
 #include "Pegmatite/ast.hh"
 #include "runtime.hh"
@@ -66,6 +67,7 @@ namespace Epilog {
 		// A collection of clauses.
 		class Clauses: public pegmatite::ASTContainer {
 			pegmatite::ASTList<Clause> clauses;
+			
 			public:
 			void interpret(Interpreter::Context& context);
 		};
@@ -76,6 +78,22 @@ namespace Epilog {
 			public:
 			std::string toString() const override {
 				return name;
+			}
+		};
+		
+		// List literal.
+		class ElementList: public pegmatite::ASTContainer {
+			public:
+			pegmatite::ASTList<Term> elements;
+		};
+		
+		class List: public Term {
+			public:
+			pegmatite::ASTPtr<ElementList> elementList;
+			pegmatite::ASTPtr<Term, true> tail;
+			
+			std::string toString() const override {
+				return "<temporary list literal>";
 			}
 		};
 		

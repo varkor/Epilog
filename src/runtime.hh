@@ -157,21 +157,7 @@ namespace Epilog {
 		HeapFunctor(std::string name, int parameters) : name(name), parameters(parameters) { }
 	};
 	
-	void pushCompoundTerm(const HeapFunctor& functor, std::unique_ptr<HeapContainer>& reg);
-	
-	void pushVariable(std::unique_ptr<HeapContainer>& reg);
-	
-	void pushValue(std::unique_ptr<HeapContainer>& reg);
-	
-	void unifyStructure(const HeapFunctor& functor, std::unique_ptr<HeapContainer>& reg);
-	
-	void unifyVariable(std::unique_ptr<HeapContainer>& reg);
-	
-	void unifyValue(std::unique_ptr<HeapContainer>& reg);
-	
-	HeapReference::heapIndex dereference(std::unique_ptr<HeapContainer>& container, HeapReference::heapIndex index);
-	
-	HeapReference::heapIndex dereference(HeapReference::heapIndex index);
+	HeapReference dereference(const HeapReference& reference);
 	
 	template <class T>
 	class BoundsCheckedVector: public std::vector<std::unique_ptr<T>> {
@@ -294,10 +280,10 @@ namespace Epilog {
 	};
 	
 	struct PushCompoundTermInstruction: Instruction {
-		const HeapFunctor functor;
+		HeapFunctor functor;
 		HeapReference registerReference;
 		
-		PushCompoundTermInstruction(const HeapFunctor functor, HeapReference registerReference) : functor(functor), registerReference(registerReference) { }
+		PushCompoundTermInstruction(HeapFunctor functor, HeapReference registerReference) : functor(functor), registerReference(registerReference) { }
 		
 		virtual void execute() override;
 		
