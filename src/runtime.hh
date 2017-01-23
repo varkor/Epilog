@@ -157,6 +157,24 @@ namespace Epilog {
 		HeapFunctor(std::string name, int parameters) : name(name), parameters(parameters) { }
 	};
 	
+	struct HeapNumber: HeapContainer {
+		int64_t value;
+		
+		virtual std::unique_ptr<HeapContainer> copy() const override {
+			return std::unique_ptr<HeapNumber>(new HeapNumber(*this));
+		}
+		
+		virtual std::string toString() const override {
+			return std::to_string(value);
+		}
+		
+		virtual std::string trace(bool explicitControlCharacters = false) const override {
+			return toString();
+		}
+		
+		HeapNumber(int64_t value) : value(value) { }
+	};
+	
 	HeapReference dereference(const HeapReference& reference);
 	
 	template <class T>
@@ -316,6 +334,19 @@ namespace Epilog {
 		}
 	};
 	
+	struct PushNumberInstruction: Instruction {
+		HeapNumber number;
+		HeapReference registerReference;
+		
+		PushNumberInstruction(HeapNumber number, HeapReference registerReference) : number(number), registerReference(registerReference) { }
+		
+		virtual void execute() override;
+		
+		virtual std::string toString() const override {
+			return "put_integer " + std::to_string(number.value) + ", " + registerReference.toString();
+		}
+	};
+	
 	struct UnifyCompoundTermInstruction: Instruction {
 		HeapFunctor functor;
 		HeapReference registerReference;
@@ -350,6 +381,19 @@ namespace Epilog {
 		
 		virtual std::string toString() const override {
 			return "unify_value " + registerReference.toString();
+		}
+	};
+	
+	struct UnifyNumberInstruction: Instruction {
+		HeapNumber number;
+		HeapReference registerReference;
+		
+		UnifyNumberInstruction(HeapNumber number, HeapReference registerReference) : number(number), registerReference(registerReference) { }
+		
+		virtual void execute() override;
+		
+		virtual std::string toString() const override {
+			return "get_integer " + std::to_string(number.value) + ", " + registerReference.toString();
 		}
 	};
 	

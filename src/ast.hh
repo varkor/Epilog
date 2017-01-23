@@ -99,9 +99,9 @@ namespace Epilog {
 		
 		// Number literal.
 		class Number: public Term {
+			public:
 			int64_t value;
 			
-			public:
 			std::string toString() const override {
 				return std::to_string(value);
 			}

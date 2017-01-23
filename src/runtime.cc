@@ -93,6 +93,12 @@ namespace Epilog {
 		++ Runtime::nextInstruction;
 	}
 	
+	void PushNumberInstruction::execute() {
+		Runtime::heap.push_back(number.copy());
+		registerReference.assign(number.copy());
+		++ Runtime::nextInstruction;
+	}
+	
 	HeapReference dereference(const HeapReference& reference) {
 		if (HeapTuple* value = dynamic_cast<HeapTuple*>(reference.getPointer())) {
 			HeapTuple::Type type = value->type;
@@ -103,6 +109,8 @@ namespace Epilog {
 			} else { 
 				return reference;
 			}
+		} else if (dynamic_cast<HeapNumber*>(reference.getPointer())) {
+			return reference;
 		} else {
 			throw RuntimeException("Tried to dereference a non-tuple address on the stack as a tuple.", __FILENAME__, __func__, __LINE__);
 		}
@@ -117,9 +125,12 @@ namespace Epilog {
 	}
 	
 	void bind(HeapReference& referenceA, HeapReference& referenceB) {
-		HeapTuple* tupleA, * tupleB;
-		if ((tupleA = dynamic_cast<HeapTuple*>(referenceA.getPointer())) && (tupleB = dynamic_cast<HeapTuple*>(referenceB.getPointer()))) {
-			if (tupleA->type == HeapTuple::Type::reference && (tupleB->type != HeapTuple::Type::reference || referenceA.index <= referenceB.index)) {
+		HeapTuple* tupleA = dynamic_cast<HeapTuple*>(referenceA.getPointer());
+		HeapTuple* tupleB = dynamic_cast<HeapTuple*>(referenceB.getPointer());
+		HeapNumber* numberA = dynamic_cast<HeapNumber*>(referenceA.getPointer());
+		HeapNumber* numberB = dynamic_cast<HeapNumber*>(referenceB.getPointer());
+		if ((tupleA || numberA) && (tupleB || numberB)) {
+			if ((tupleA && tupleA->type == HeapTuple::Type::reference) && (!tupleB || tupleB->type != HeapTuple::Type::reference || referenceA.index <= referenceB.index)) {
 				referenceA.assign(referenceB.getAsCopy());
 				trail(referenceA);
 			} else {
@@ -136,33 +147,41 @@ namespace Epilog {
 		pushdownList.push(a);
 		pushdownList.push(b);
 		while (!pushdownList.empty()) {
-			HeapReference d1 = dereference(pushdownList.top()); pushdownList.pop();
-			HeapReference d2 = dereference(pushdownList.top()); pushdownList.pop();
+			HeapReference referenceA = dereference(pushdownList.top()); pushdownList.pop();
+			HeapReference referenceB = dereference(pushdownList.top()); pushdownList.pop();
 			// Force unification to occur if both values are compound terms placed in registers
-			if (d1 != d2) {
-				HeapTuple* value1 = dynamic_cast<HeapTuple*>(d1.getPointer());
-				HeapTuple* value2 = dynamic_cast<HeapTuple*>(d2.getPointer());
-				if (value1 && value2) {
-					HeapTuple::Type t1 = value1->type;
-					HeapTuple::Type t2 = value2->type;
-					if (t1 == HeapTuple::Type::reference || t2 == HeapTuple::Type::reference) {
-						bind(d1, d2);
+			if (referenceA != referenceB) {
+				HeapTuple* tupleA = dynamic_cast<HeapTuple*>(referenceA.getPointer());
+				HeapTuple* tupleB = dynamic_cast<HeapTuple*>(referenceB.getPointer());
+				HeapNumber* numberA = dynamic_cast<HeapNumber*>(referenceA.getPointer());
+				HeapNumber* numberB = dynamic_cast<HeapNumber*>(referenceB.getPointer());
+				if ((tupleA || numberA) && (tupleB || numberB)) {
+					HeapTuple::Type typeA = tupleA ? tupleA->type : HeapTuple::Type::compoundTerm;
+					HeapTuple::Type typeB = tupleB ? tupleB->type : HeapTuple::Type::compoundTerm;
+					if (typeA == HeapTuple::Type::reference || typeB == HeapTuple::Type::reference) {
+						bind(referenceA, referenceB);
 					} else {
-						HeapReference::heapIndex v1 = value1->reference;
-						HeapReference::heapIndex v2 = value2->reference;
-						HeapFunctor* fn1 = dynamic_cast<HeapFunctor*>(Runtime::heap[v1].get());
-						HeapFunctor* fn2 = dynamic_cast<HeapFunctor*>(Runtime::heap[v2].get());
-						if (fn1 && fn2) {
-							if (fn1->name == fn2->name && fn1->parameters == fn2->parameters) {
-								for (int i = 1; i <= fn1->parameters; ++ i) {
-									pushdownList.push(HeapReference(StorageArea::heap, v1 + i));
-									pushdownList.push(HeapReference(StorageArea::heap, v2 + i));
-								}
-							} else {
-								throw UnificationError("Tried to unify two values that cannot unify.", __FILENAME__, __func__, __LINE__);
+						if (numberA && numberB) {
+							if (numberA->value != numberB->value) {
+								throw UnificationError("Tried to unify two unequal numbers.", __FILENAME__, __func__, __LINE__);
 							}
 						} else {
-							throw RuntimeException("Tried to dereference a non-functor address on the stack as a functor.", __FILENAME__, __func__, __LINE__);
+							HeapReference::heapIndex indexA = tupleA->reference;
+							HeapReference::heapIndex indexB = tupleB->reference;
+							HeapFunctor* functorA = dynamic_cast<HeapFunctor*>(Runtime::heap[indexA].get());
+							HeapFunctor* functorB = dynamic_cast<HeapFunctor*>(Runtime::heap[indexB].get());
+							if (functorA && functorB) {
+								if (functorA->name == functorB->name && functorA->parameters == functorB->parameters) {
+									for (int i = 1; i <= functorA->parameters; ++ i) {
+										pushdownList.push(HeapReference(StorageArea::heap, indexA + i));
+										pushdownList.push(HeapReference(StorageArea::heap, indexB + i));
+									}
+								} else {
+									throw UnificationError("Tried to unify two values that cannot unify.", __FILENAME__, __func__, __LINE__);
+								}
+							} else {
+								throw RuntimeException("Tried to dereference a non-functor address on the stack as a functor.", __FILENAME__, __func__, __LINE__);
+							}
 						}
 					}
 				} else {
@@ -194,6 +213,40 @@ namespace Epilog {
 							Runtime::mode = Mode::read;
 						} else {
 							throw UnificationError("Tried to unify two functors that cannot unify.", __FILENAME__, __func__, __LINE__);
+						}
+					} else {
+						throw RuntimeException("Tried to dereference a non-functor address on the stack as a functor.", __FILENAME__, __func__, __LINE__);
+					}
+					break;
+				}					
+			}
+		} else {
+			throw RuntimeException("Tried to dereference a non-tuple address on the stack as a tuple.", __FILENAME__, __func__, __LINE__);
+		}
+		++ Runtime::nextInstruction;
+	}
+	
+	void UnifyNumberInstruction::execute() {
+		HeapReference address = dereference(registerReference);
+		if (HeapTuple* value = dynamic_cast<HeapTuple*>(address.getPointer())) {
+			HeapTuple::Type type = value->type;
+			switch (type) {
+				case HeapTuple::Type::reference: {
+					HeapReference::heapIndex index = Runtime::heap.size();
+					Runtime::heap.push_back(number.copy());
+					HeapReference newNumber(StorageArea::heap, index);
+					bind(address, newNumber);
+					Runtime::mode = Mode::write;
+					break;
+				}
+				case HeapTuple::Type::compoundTerm: {
+					HeapReference::heapIndex reference = value->reference;
+					if (HeapNumber* num = dynamic_cast<HeapNumber*>(Runtime::heap[reference].get())) {
+						if (num->value == number.value) {
+							Runtime::unificationIndex = reference + 1;
+							Runtime::mode = Mode::read;
+						} else {
+							throw UnificationError("Tried to unify two unequal numbers.", __FILENAME__, __func__, __LINE__);
 						}
 					} else {
 						throw RuntimeException("Tried to dereference a non-functor address on the stack as a functor.", __FILENAME__, __func__, __LINE__);

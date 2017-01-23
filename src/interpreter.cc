@@ -25,7 +25,7 @@ namespace Epilog {
 		} },
 		{ "is/2", [] (Interpreter::Context& context, HeapReference::heapIndex& registers) {
 			pushInstruction(context, new CommandInstruction("evaluate"));
-			pushInstruction(context, new PushCompoundTermInstruction(HeapFunctor("<dynamic_term>", 0), HeapReference(StorageArea::reg, 1)));
+			pushInstruction(context, new PushNumberInstruction(HeapNumber(std::nan("")), HeapReference(StorageArea::reg, 1)));
 			pushInstruction(context, new UnifyRegisterAndArgumentInstruction(HeapReference(StorageArea::reg, 0), HeapReference(StorageArea::reg, 1)));
 			pushInstruction(context, new ProceedInstruction());
 			registers = 2;
@@ -69,12 +69,9 @@ namespace Epilog {
 				}
 				return sum;
 			}
-			size_t length;
-			int64_t value = std::stoll(name, &length);
-			if (length == 0 || length < name.length()) {
-				throw RuntimeException("Tried to evaluate a functor that is neither an integer nor a recognised operation.", __FILENAME__, __func__, __LINE__);
-			}
-			return value;
+			throw RuntimeException("Tried to evaluate a functor that is not a recognised operation.", __FILENAME__, __func__, __LINE__);
+		} else if (HeapNumber* number = dynamic_cast<HeapNumber*>(container)) {
+			return number->value;
 		} else {
 			throw RuntimeException("Tried to evaluate an unknown container.", __FILENAME__, __func__, __LINE__);
 		}
@@ -93,8 +90,8 @@ namespace Epilog {
 		{ "evaluate", [] {
 			HeapTuple* tuple;
 			if ((tuple = dynamic_cast<HeapTuple*>(Runtime::registers[1].get()))) {
-				if (PushCompoundTermInstruction* instruction = dynamic_cast<PushCompoundTermInstruction*>(Runtime::instructions[Runtime::nextInstruction + 1].get())) {
-					instruction->functor.name = std::to_string(evaluateCompoundTerm(dereference(HeapReference(StorageArea::reg, 1))));
+				if (PushNumberInstruction* instruction = dynamic_cast<PushNumberInstruction*>(Runtime::instructions[Runtime::nextInstruction + 1].get())) {
+					instruction->number.value = evaluateCompoundTerm(dereference(HeapReference(StorageArea::reg, 1)));
 					return;
 				} else {
 					throw ::Epilog::RuntimeException("Tried to evaluate a compound term without then pushing it to a register.", __FILENAME__, __func__, __LINE__);
@@ -112,6 +109,7 @@ namespace Epilog {
 			HeapReference reg;
 			std::string name;
 			std::string symbol;
+			int64_t value = 0;
 			std::vector<std::shared_ptr<TermNode>> children;
 			
 			TermNode(Term* term, std::shared_ptr<TermNode> parent) : term(term), parent(parent) { }
@@ -223,6 +221,7 @@ namespace Epilog {
 				} else if (Number* number = dynamic_cast<Number*>(term)) {
 					node->name = number->toString();
 					node->symbol = node->name;
+					node->value = number->value;
 				} else {
 					throw CompilationException("Found a term of an unknown type in the query.", __FILENAME__, __func__, __LINE__);
 				}
@@ -295,7 +294,7 @@ namespace Epilog {
 		
 		typedef typename std::function<Instruction*(std::shared_ptr<TermNode>, std::unordered_map<std::string, HeapReference>&)> instructionGenerator;
 		
-		std::pair<BoundsCheckedVector<Instruction>::size_type, std::unordered_map<std::string, HeapReference>> generateInstructionsForClause(Interpreter::Context& context, bool dependentAllocations, std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> permanence, std::unordered_set<std::string>& encounters, CompoundTerm* head, instructionGenerator unseenArgumentVariable, instructionGenerator unseenRegisterVariable, instructionGenerator seenArgumentVariable, instructionGenerator seenRegisterVariable, instructionGenerator compoundTerm, instructionGenerator conclusion) {
+		std::pair<BoundsCheckedVector<Instruction>::size_type, std::unordered_map<std::string, HeapReference>> generateInstructionsForClause(Interpreter::Context& context, bool dependentAllocations, std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> permanence, std::unordered_set<std::string>& encounters, CompoundTerm* head, instructionGenerator unseenArgumentVariable, instructionGenerator unseenRegisterVariable, instructionGenerator seenArgumentVariable, instructionGenerator seenRegisterVariable, instructionGenerator compoundTerm, instructionGenerator number, instructionGenerator conclusion) {
 			
 			auto tuple = buildAllocationTree(permanence, head);
 			std::shared_ptr<TermNode> root(std::get<0>(tuple));
@@ -367,7 +366,7 @@ namespace Epilog {
 					}
 				} else if (dynamic_cast<Number*>(node->term)) {
 					if (parent != nullptr) {
-						pushInstruction(context, compoundTerm(node, allocations));
+						pushInstruction(context, number(node, allocations));
 						encounters.insert(node->symbol);
 					}
 				} else {
@@ -411,6 +410,7 @@ namespace Epilog {
 			auto seenArgumentVariable = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new UnifyRegisterAndArgumentInstruction(allocations[node->symbol], node->reg); };
 			auto seenRegisterVariable = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new UnifyValueInstruction(node->reg); };
 			auto compoundTerm = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new UnifyCompoundTermInstruction(HeapFunctor(node->name, node->children.size()), node->reg); };
+			auto number = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new UnifyNumberInstruction(HeapNumber(node->value), node->reg); };
 			instructionGenerator conclusion;
 			if (proceedAtEnd) {
 				conclusion = [] (std::shared_ptr<TermNode> root, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new ProceedInstruction(); };
@@ -418,7 +418,7 @@ namespace Epilog {
 				conclusion = [] (std::shared_ptr<TermNode> root, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return nullptr; };
 			}
 			
-			return generateInstructionsForClause(context, false, permanence, encounters, head, unseenArgumentVariable, unseenRegisterVariable, seenArgumentVariable, seenRegisterVariable, compoundTerm, conclusion);
+			return generateInstructionsForClause(context, false, permanence, encounters, head, unseenArgumentVariable, unseenRegisterVariable, seenArgumentVariable, seenRegisterVariable, compoundTerm, number, conclusion);
 		}
 		
 		std::pair<BoundsCheckedVector<Instruction>::size_type, std::unordered_map<std::string, HeapReference>> generateBodyInstructionsForClause(Interpreter::Context& context, std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> permanence, std::unordered_set<std::string>& encounters, CompoundTerm* head) {
@@ -427,9 +427,10 @@ namespace Epilog {
 			auto seenArgumentVariable = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new CopyRegisterToArgumentInstruction(allocations[node->symbol], node->reg); };
 			auto seenRegisterVariable = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new PushValueInstruction(node->reg); };
 			auto compoundTerm = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new PushCompoundTermInstruction(HeapFunctor(node->name, node->children.size()), node->reg); };
+			auto number = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new PushNumberInstruction(HeapNumber(node->value), node->reg); };
 			auto conclusion = [] (std::shared_ptr<TermNode> root, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new CallInstruction(HeapFunctor(root->name, root->children.size())); };
 			
-			return generateInstructionsForClause(context, true, permanence, encounters, head, unseenArgumentVariable, unseenRegisterVariable, seenArgumentVariable, seenRegisterVariable, compoundTerm, conclusion);
+			return generateInstructionsForClause(context, true, permanence, encounters, head, unseenArgumentVariable, unseenRegisterVariable, seenArgumentVariable, seenRegisterVariable, compoundTerm, number, conclusion);
 		}
 		
 		std::pair<BoundsCheckedVector<Instruction>::size_type, std::unordered_map<std::string, HeapReference>> generateInstructionsForRule(Interpreter::Context& context, CompoundTerm* head, pegmatite::ASTList<CompoundTerm>* goals) {
