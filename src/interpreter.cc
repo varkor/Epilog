@@ -252,12 +252,14 @@ namespace Epilog {
 			return wrapper;
 		}
 		
-		void removeSyntacticSugar(CompoundTerm* clause) {
+		std::unique_ptr<Term> removeSyntacticSugar(Term* clause) {
 			if (clause == nullptr) {
-				return;
+				return nullptr;
 			}
+			std::unique_ptr<Term> replacement;
 			std::stack<std::pair<Term*, pegmatite::ASTList<Term>::iterator>> terms;
-			terms.push(std::make_pair(clause, pegmatite::ASTList<Term>::iterator()));
+			pegmatite::ASTList<Term> nullList;
+			terms.push(std::make_pair(clause, nullList.end()));
 			while (!terms.empty()) {
 				auto& pair = terms.top(); terms.pop();
 				Term* term = pair.first;
@@ -279,17 +281,24 @@ namespace Epilog {
 						} else {
 							current = expansion.get();
 						}
-						current->parameterList->parameters.push_back(std::move(element));
+						std::unique_ptr<Term> expandedElement = removeSyntacticSugar(element.get());
+						current->parameterList->parameters.push_back(std::move(expandedElement != nullptr ? expandedElement : element));
 					}
 					if (list->tail != nullptr) {
-						current->parameterList->parameters.push_back(std::move(list->tail));
+						std::unique_ptr<Term> expandedTail = removeSyntacticSugar(list->tail.get());
+						current->parameterList->parameters.push_back(std::move(expandedTail != nullptr ? expandedTail : list->tail));
 					} else {
 						current->parameterList->parameters.push_back(createListWrapper(true));
 					}
-					*it = std::move(expansion);
+					if (it != nullList.end()) {
+						*it = std::move(expansion);
+					} else {
+						replacement = std::move(expansion);
+					}
 				}
 				// All other terms can be ignored as there is no syntactic sugar applicable to them.
 			}
+			return replacement;
 		}
 		
 		typedef typename std::function<Instruction*(std::shared_ptr<TermNode>, std::unordered_map<std::string, HeapReference>&)> instructionGenerator;

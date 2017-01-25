@@ -11,4 +11,4 @@ rule(one, Two, a) :- fact(Two).
 % A rule involving a list
 length([], 0).
 length([H | T], N) :- length(T, M), is(N, +(M, 1)).
-?- length([1, 2, 3, 4], N), writeln(N).
+?- length([1, 2, 3, [4 | [5 | [6]]]], N), writeln(N).
