@@ -15,34 +15,34 @@
 namespace Epilog {
 	class Exception {
 		protected:
-		int indentation;
+		int64_t indentation;
 		
 		public:
 		std::string message;
 		std::string file;
 		std::string function;
-		int line;
+		int64_t line;
 		
 		void print() const {
 			std::cerr << std::string(indentation, '\t') << file << " > " << function << "() (L" << line << "): " << message << std::endl;
 		}
 		
-		Exception(std::string message, std::string file, std::string function, int line, int indentation = 0) : indentation(indentation), message(message), file(file), function(function), line(line) { }
+		Exception(std::string message, std::string file, std::string function, int64_t line, int64_t indentation = 0) : indentation(indentation), message(message), file(file), function(function), line(line) { }
 	};
 	
 	class CompilationException: public Exception {
 		public:
-		CompilationException(std::string message, std::string file, std::string function, int line) : Exception(message, file, function, line, 1) { }
+		CompilationException(std::string message, std::string file, std::string function, int64_t line) : Exception(message, file, function, line, 1) { }
 	};
 	
 	class RuntimeException: public Exception {
 		public:
-		RuntimeException(std::string message, std::string file, std::string function, int line) : Exception(message, file, function, line, 2) { }
+		RuntimeException(std::string message, std::string file, std::string function, int64_t line) : Exception(message, file, function, line, 2) { }
 	};
 	
 	class UnificationError: public RuntimeException {
 		public:
-		UnificationError(std::string message, std::string file, std::string function, int line) : RuntimeException(message, file, function, line) { }
+		UnificationError(std::string message, std::string file, std::string function, int64_t line) : RuntimeException(message, file, function, line) { }
 	};
 	
 	enum Mode { read, write };
@@ -131,7 +131,7 @@ namespace Epilog {
 	
 	struct HeapFunctor: HeapContainer {
 		std::string name;
-		int parameters;
+		int64_t parameters;
 		
 		virtual std::unique_ptr<HeapContainer> copy() const override {
 			return std::unique_ptr<HeapFunctor>(new HeapFunctor(*this));
@@ -154,7 +154,7 @@ namespace Epilog {
 			return name;
 		}
 		
-		HeapFunctor(std::string name, int parameters) : name(name), parameters(parameters) { }
+		HeapFunctor(std::string name, int64_t parameters) : name(name), parameters(parameters) { }
 	};
 	
 	struct HeapNumber: HeapContainer {
@@ -280,7 +280,7 @@ namespace Epilog {
 			compressStateStack();
 		}
 		
-		static int currentNumberOfArguments;
+		static int64_t currentNumberOfArguments;
 		
 		// The stack used to contain the variables to unbind when backtracking
 		static std::vector<HeapReference> trail;
@@ -470,9 +470,9 @@ namespace Epilog {
 	};
 	
 	struct AllocateInstruction: Instruction {
-		int variables;
+		int64_t variables;
 		
-		AllocateInstruction(int variables) : variables(variables) { }
+		AllocateInstruction(int64_t variables) : variables(variables) { }
 		
 		virtual void execute() override;
 		

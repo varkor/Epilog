@@ -10,10 +10,12 @@
 #endif
 
 namespace Epilog {
-	void pushInstruction(Interpreter::Context& context, Instruction* instruction) {
+	Instruction::instructionReference pushInstruction(Interpreter::Context& context, Instruction* instruction) {
+		Instruction::instructionReference instructionAddress = context.insertionAddress;
 		if (instruction != nullptr) {
 			Runtime::instructions.insert(Runtime::instructions.begin() + (context.insertionAddress ++), std::unique_ptr<Instruction>(instruction));
 		}
+		return instructionAddress;
 	}
 	
 	std::unordered_map<std::string, std::function<void(Interpreter::Context& context, HeapReference::heapIndex& registers)>> StandardLibrary::functions = {
@@ -25,7 +27,7 @@ namespace Epilog {
 		} },
 		{ "is/2", [] (Interpreter::Context& context, HeapReference::heapIndex& registers) {
 			pushInstruction(context, new CommandInstruction("evaluate"));
-			pushInstruction(context, new PushNumberInstruction(HeapNumber(std::nan("")), HeapReference(StorageArea::reg, 1)));
+			pushInstruction(context, new PushNumberInstruction(HeapNumber(0), HeapReference(StorageArea::reg, 1)));
 			pushInstruction(context, new UnifyRegisterAndArgumentInstruction(HeapReference(StorageArea::reg, 0), HeapReference(StorageArea::reg, 1)));
 			pushInstruction(context, new ProceedInstruction());
 			registers = 2;
@@ -64,7 +66,7 @@ namespace Epilog {
 			std::string& name = functor->name;
 			if (name == "+" && functor->parameters > 1) {
 				int64_t sum = 0;
-				for (int i = 0; i < functor->parameters; ++ i) {
+				for (int64_t i = 0; i < functor->parameters; ++ i) {
 					sum += evaluateCompoundTerm(dereference(HeapReference(StorageArea::heap, reference.index + (i + 1))));
 				}
 				return sum;
@@ -125,7 +127,7 @@ namespace Epilog {
 		}
 		
 		std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> findVariablePermanence(CompoundTerm* head, pegmatite::ASTList<CompoundTerm>* goals, bool forcePermanence) {
-			std::unordered_map<std::string, int> appearances;
+			std::unordered_map<std::string, int64_t> appearances;
 			std::queue<CompoundTerm*> clauses;
 			std::queue<Term*> terms;
 			if (head != nullptr) {
@@ -542,22 +544,22 @@ namespace Epilog {
 			return std::make_pair(startAddress, permanence.second);
 		}
 		
-		void executeInstructions(BoundsCheckedVector<Instruction>::size_type startAddress, std::unordered_map<std::string, HeapReference>& allocations) {
+		void executeInstructions(BoundsCheckedVector<Instruction>::size_type startAddress, std::unordered_map<std::string, HeapReference>* allocations) {
 			// Execute the instructions
+			Runtime::nextInstruction = startAddress;
+			Runtime::nextGoal = Runtime::instructions.size();
 			if (DEBUG) {
 				std::cerr << "Execute:" << (Runtime::nextInstruction < Runtime::instructions.size() ? "" : " (None)") << std::endl;
 			}
-			Runtime::nextInstruction = startAddress;
-			Runtime::nextGoal = Runtime::instructions.size();
 			while (Runtime::nextInstruction < Runtime::instructions.size()) {
 				std::unique_ptr<Instruction>& instruction = Runtime::instructions[Runtime::nextInstruction];
 				if (DEBUG) {
 					std::cerr << "\t" << instruction->toString() << std::endl;
-					if (Runtime::nextInstruction == Runtime::instructions.size() - 1) {
+					if (allocations != nullptr && Runtime::nextInstruction == Runtime::instructions.size() - 1) {
 						// The last instruction is always a deallocate.
 						// We want to print the bindings before they are removed from the stack.
-						std::cerr << "Bindings:" << (allocations.size() > 0 ? "" : " (None)") << std::endl;
-						for (auto& allocation : allocations) {
+						std::cerr << "Bindings:" << (allocations->size() > 0 ? "" : " (None)") << std::endl;
+						for (auto& allocation : *allocations) {
 							std::cerr << "\t" << allocation.first << " = " << allocation.second.get()->trace() << std::endl;
 						}
 					}
@@ -599,7 +601,7 @@ namespace Epilog {
 			auto pair = generateInstructionsForRule(context, nullptr, &body->goals);
 			auto startAddress = pair.first;
 			auto allocations = pair.second;
-			executeInstructions(startAddress, allocations);
+			executeInstructions(startAddress, &allocations);
 		}
 	}
 }

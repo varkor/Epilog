@@ -13,7 +13,7 @@ namespace Epilog {
 	std::vector<std::unique_ptr<StateReference>> Runtime::stateStack;
 	StateReference::stateIndex Runtime::topEnvironment = -1UL;
 	StateReference::stateIndex Runtime::topChoicePoint = -1UL;
-	int Runtime::currentNumberOfArguments = 0;
+	int64_t Runtime::currentNumberOfArguments = 0;
 	std::vector<HeapReference> Runtime::trail;
 	std::unordered_map<std::string, Instruction::instructionReference> Runtime::labels;
 	Mode Runtime::mode;
@@ -55,7 +55,7 @@ namespace Epilog {
 			case Type::compoundTerm: {
 				if (HeapFunctor* functor = dynamic_cast<HeapFunctor*>(Runtime::heap[reference].get())) {
 					std::string parameters = "";
-					for (int i = 0; i < functor->parameters; ++ i) {
+					for (int64_t i = 0; i < functor->parameters; ++ i) {
 						parameters += (i > 0 ? "," : "") + Runtime::heap[reference + (i + 1)]->trace(explicitControlCharacters);
 					}
 					return Runtime::heap[reference]->trace(explicitControlCharacters) + (functor->parameters > 0 ? "(" + parameters + ")" : "");
@@ -172,7 +172,7 @@ namespace Epilog {
 							HeapFunctor* functorB = dynamic_cast<HeapFunctor*>(Runtime::heap[indexB].get());
 							if (functorA && functorB) {
 								if (functorA->name == functorB->name && functorA->parameters == functorB->parameters) {
-									for (int i = 1; i <= functorA->parameters; ++ i) {
+									for (int64_t i = 1; i <= functorA->parameters; ++ i) {
 										pushdownList.push(HeapReference(StorageArea::heap, indexA + i));
 										pushdownList.push(HeapReference(StorageArea::heap, indexB + i));
 									}
@@ -332,7 +332,7 @@ namespace Epilog {
 	void AllocateInstruction::execute() {
 		std::unique_ptr<Environment> environment(new Environment(Runtime::nextGoal));
 		environment->previousEnvironment = Runtime::topEnvironment;
-		for (int i = 0; i < variables; ++ i) {
+		for (int64_t i = 0; i < variables; ++ i) {
 			environment->variables.push_back(nullptr);
 		}
 		Runtime::topEnvironment = Runtime::stateStack.size();
@@ -360,7 +360,7 @@ namespace Epilog {
 		choicePoint->previousChoicePoint = Runtime::topChoicePoint;
 		choicePoint->environment = Runtime::topEnvironment;
 		// Initialise the arguments
-		for (int i = 0; i < Runtime::currentNumberOfArguments; ++ i) {
+		for (int64_t i = 0; i < Runtime::currentNumberOfArguments; ++ i) {
 			choicePoint->arguments.push_back(Runtime::registers[i]->copy());
 		}
 		Runtime::topChoicePoint = Runtime::stateStack.size();

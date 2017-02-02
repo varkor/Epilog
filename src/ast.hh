@@ -17,6 +17,8 @@ namespace Epilog {
 			virtual std::string toString() const = 0;
 		};
 		
+		std::string normaliseIdentifierName(std::string);
+		
 		class Identifier: public pegmatite::ASTString {
 			public:
 			bool construct(const pegmatite::InputRange& range, pegmatite::ASTStack& stack, const pegmatite::ErrorReporter& errorReporter) override;
