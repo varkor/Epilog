@@ -220,6 +220,8 @@ namespace Epilog {
 					break;
 				}					
 			}
+		} else if (dynamic_cast<HeapNumber*>(address.getPointer())) {
+			throw UnificationError("Tried to unify a compound term with a number.", __FILENAME__, __func__, __LINE__);
 		} else {
 			throw RuntimeException("Tried to dereference a non-tuple address on the stack as a tuple.", __FILENAME__, __func__, __LINE__);
 		}
@@ -240,19 +242,15 @@ namespace Epilog {
 					break;
 				}
 				case HeapTuple::Type::compoundTerm: {
-					HeapReference::heapIndex reference = value->reference;
-					if (HeapNumber* num = dynamic_cast<HeapNumber*>(Runtime::heap[reference].get())) {
-						if (num->value == number.value) {
-							Runtime::unificationIndex = reference + 1;
-							Runtime::mode = Mode::read;
-						} else {
-							throw UnificationError("Tried to unify two unequal numbers.", __FILENAME__, __func__, __LINE__);
-						}
-					} else {
-						throw RuntimeException("Tried to dereference a non-functor address on the stack as a functor.", __FILENAME__, __func__, __LINE__);
-					}
-					break;
+					throw UnificationError("Tried to unify a number with a compound term.", __FILENAME__, __func__, __LINE__);
 				}					
+			}
+		} else if (HeapNumber* num = dynamic_cast<HeapNumber*>(address.getPointer())) {
+			if (num->value == number.value) {
+				Runtime::unificationIndex = address.index + 1;
+				Runtime::mode = Mode::read;
+			} else {
+				throw UnificationError("Tried to unify two unequal numbers.", __FILENAME__, __func__, __LINE__);
 			}
 		} else {
 			throw RuntimeException("Tried to dereference a non-tuple address on the stack as a tuple.", __FILENAME__, __func__, __LINE__);

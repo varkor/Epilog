@@ -35,7 +35,7 @@ namespace Epilog {
 			ExprPtr character = letter | digit | '_';
 			
 			// Numbers: sequences of one or more digits.
-			Rule number = +digit;
+			Rule number = pegmatite::term(-"-"_E >> +digit);
 			
 			// Identifiers: names (for example, for facts or rules).
 			Rule simpleIdentifier = pegmatite::term(lowercase >> *character) | ".+"_S | "[]";
