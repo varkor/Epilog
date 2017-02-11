@@ -13,7 +13,7 @@ namespace Epilog {
 	Instruction::instructionReference pushInstruction(Interpreter::Context& context, Instruction* instruction) {
 		Instruction::instructionReference instructionAddress = context.insertionAddress;
 		if (instruction != nullptr) {
-			Runtime::instructions.insert(Runtime::instructions.begin() + (context.insertionAddress ++), std::unique_ptr<Instruction>(instruction));
+			Runtime::currentRuntime->instructions.insert(Runtime::currentRuntime->instructions.begin() + (context.insertionAddress ++), std::unique_ptr<Instruction>(instruction));
 		}
 		return instructionAddress;
 	}
@@ -87,12 +87,12 @@ namespace Epilog {
 			std::cout << std::endl;
 		} },
 		{ "print", [] {
-			std::cout << Runtime::registers[0]->trace();
+			std::cout << Runtime::currentRuntime->registers[0]->trace();
 		} },
 		{ "evaluate", [] {
 			HeapTuple* tuple;
-			if ((tuple = dynamic_cast<HeapTuple*>(Runtime::registers[1].get()))) {
-				if (PushNumberInstruction* instruction = dynamic_cast<PushNumberInstruction*>(Runtime::instructions[Runtime::nextInstruction + 1].get())) {
+			if ((tuple = dynamic_cast<HeapTuple*>(Runtime::currentRuntime->registers[1].get()))) {
+				if (PushNumberInstruction* instruction = dynamic_cast<PushNumberInstruction*>(Runtime::currentRuntime->instructions[Runtime::currentRuntime->nextInstruction + 1].get())) {
 					instruction->number.value = evaluateCompoundTerm(dereference(HeapReference(StorageArea::reg, 1)));
 					return;
 				} else {
@@ -241,10 +241,10 @@ namespace Epilog {
 		}
 		
 		void printMemory() {
-			std::cerr << "Stack (" << Runtime::heap.size() << "):" << (Runtime::heap.size() > 0 ? "" : " (None)") << std::endl;
-			Runtime::heap.print();
-			std::cerr << "Registers (" << Runtime::registers.size() << "):" << (Runtime::registers.size() > 0 ? "" : " (None)") << std::endl;
-			Runtime::registers.print();
+			std::cerr << "Stack (" << Runtime::currentRuntime->heap.size() << "):" << (Runtime::currentRuntime->heap.size() > 0 ? "" : " (None)") << std::endl;
+			Runtime::currentRuntime->heap.print();
+			std::cerr << "Registers (" << Runtime::currentRuntime->registers.size() << "):" << (Runtime::currentRuntime->registers.size() > 0 ? "" : " (None)") << std::endl;
+			Runtime::currentRuntime->registers.print();
 		}
 		
 		std::unique_ptr<CompoundTerm> createListWrapper(bool empty = false) {
@@ -320,11 +320,11 @@ namespace Epilog {
 				}
 			}
 			
-			BoundsCheckedVector<Instruction>::size_type startAddress = Runtime::instructions.size();
+			BoundsCheckedVector<Instruction>::size_type startAddress = Runtime::currentRuntime->instructions.size();
 			
 			// Use the runtime instructions to build this structure on the heap
-			while (Runtime::registers.size() < registers.size()) {
-				Runtime::registers.push_back(nullptr);
+			while (Runtime::currentRuntime->registers.size() < registers.size()) {
+				Runtime::currentRuntime->registers.push_back(nullptr);
 			}
 			std::deque<std::pair<std::shared_ptr<TermNode>, bool>> terms;
 			std::stack<std::pair<std::shared_ptr<TermNode>, bool>> reverse;
@@ -397,13 +397,13 @@ namespace Epilog {
 				if (DEBUG) {
 					std::cerr << "Register built-in function: " << symbol << std::endl;
 				}
-				Runtime::labels[symbol] = context.insertionAddress;
+				Runtime::currentRuntime->labels[symbol] = context.insertionAddress;
 				HeapReference::heapIndex registers = 0;
 				pair.second(context, registers);
 				maximumRegisters = std::max(maximumRegisters, registers);
 			}
-			while (Runtime::registers.size() < maximumRegisters) {
-				Runtime::registers.push_back(nullptr);
+			while (Runtime::currentRuntime->registers.size() < maximumRegisters) {
+				Runtime::currentRuntime->registers.push_back(nullptr);
 			}
 			if (DEBUG) {
 				std::cerr << std::endl;
@@ -454,7 +454,7 @@ namespace Epilog {
 			}
 			
 			auto permanence = findVariablePermanence(head, goals, head == nullptr);
-			auto startAddress = context.insertionAddress = Runtime::instructions.size();
+			auto startAddress = context.insertionAddress = Runtime::currentRuntime->instructions.size();
 			
 			if (DEBUG) {
 				std::cerr << "Permanent register allocation:" << (permanence.second.size() > 0 ? "" : " (None)") << std::endl;
@@ -475,18 +475,18 @@ namespace Epilog {
 				
 				auto previous = context.functorClauses.find(symbol);
 				if (previous == context.functorClauses.end()) {
-					Runtime::labels[symbol] = context.insertionAddress;
+					Runtime::currentRuntime->labels[symbol] = context.insertionAddress;
 					context.functorClauses.emplace(symbol, Interpreter::FunctorClause(startAddress, startAddress));
 				} else {
 					auto& functorClause = previous->second;
 					if (functorClause.startAddresses.size() == 1) {
 						// A single clause with this functor has been defined.
 						context.insertionAddress = functorClause.endAddress + 1;
-						Runtime::instructions.insert(Runtime::instructions.begin() + functorClause.startAddresses.front(), std::unique_ptr<Instruction>(new TryInitialClauseInstruction(context.insertionAddress)));
+						Runtime::currentRuntime->instructions.insert(Runtime::currentRuntime->instructions.begin() + functorClause.startAddresses.front(), std::unique_ptr<Instruction>(new TryInitialClauseInstruction(context.insertionAddress)));
 					} else {
 						// Functors with this clause have already been defined.
 						context.insertionAddress = functorClause.endAddress;
-						Runtime::instructions[functorClause.startAddresses.back()] = std::unique_ptr<Instruction>(new TryIntermediateClauseInstruction(context.insertionAddress));
+						Runtime::currentRuntime->instructions[functorClause.startAddresses.back()] = std::unique_ptr<Instruction>(new TryIntermediateClauseInstruction(context.insertionAddress));
 					}
 					// Change the insertion position
 					startAddress = context.insertionAddress;
@@ -512,9 +512,9 @@ namespace Epilog {
 				std::string symbol = head->name + "/" + std::to_string(head->parameterList->parameters.size());
 				context.functorClauses.find(symbol)->second.endAddress = context.insertionAddress;
 				// Offset labels and start addresses of any clauses whose instructions were displaced by inserting this new clause
-				if (context.insertionAddress != Runtime::instructions.size()) {
+				if (context.insertionAddress != Runtime::currentRuntime->instructions.size()) {
 					auto offset = context.insertionAddress - startAddress;
-					for (auto& label : Runtime::labels) {
+					for (auto& label : Runtime::currentRuntime->labels) {
 						if (label.second > startAddress) {
 							label.second += offset;
 						}
@@ -535,7 +535,7 @@ namespace Epilog {
 			if (DEBUG) {
 				std::cerr << "Instructions:" << (context.insertionAddress - startAddress > 0 ? "" : " (None)") << std::endl;
 				for (auto i = startAddress; i < context.insertionAddress; ++ i) {
-					std::unique_ptr<Instruction>& instruction = Runtime::instructions[i]; 
+					std::unique_ptr<Instruction>& instruction = Runtime::currentRuntime->instructions[i]; 
 					std::cerr << "\t" << instruction->toString() << std::endl;
 				}
 				std::cerr << std::endl;
@@ -546,16 +546,16 @@ namespace Epilog {
 		
 		void executeInstructions(BoundsCheckedVector<Instruction>::size_type startAddress, std::unordered_map<std::string, HeapReference>* allocations) {
 			// Execute the instructions
-			Runtime::nextInstruction = startAddress;
-			Runtime::nextGoal = Runtime::instructions.size();
+			Runtime::currentRuntime->nextInstruction = startAddress;
+			Runtime::currentRuntime->nextGoal = Runtime::currentRuntime->instructions.size();
 			if (DEBUG) {
-				std::cerr << "Execute:" << (Runtime::nextInstruction < Runtime::instructions.size() ? "" : " (None)") << std::endl;
+				std::cerr << "Execute:" << (Runtime::currentRuntime->nextInstruction < Runtime::currentRuntime->instructions.size() ? "" : " (None)") << std::endl;
 			}
-			while (Runtime::nextInstruction < Runtime::instructions.size()) {
-				std::unique_ptr<Instruction>& instruction = Runtime::instructions[Runtime::nextInstruction];
+			while (Runtime::currentRuntime->nextInstruction < Runtime::currentRuntime->instructions.size()) {
+				std::unique_ptr<Instruction>& instruction = Runtime::currentRuntime->instructions[Runtime::currentRuntime->nextInstruction];
 				if (DEBUG) {
 					std::cerr << "\t" << instruction->toString() << std::endl;
-					if (allocations != nullptr && Runtime::nextInstruction == Runtime::instructions.size() - 1) {
+					if (allocations != nullptr && Runtime::currentRuntime->nextInstruction == Runtime::currentRuntime->instructions.size() - 1) {
 						// The last instruction is always a deallocate.
 						// We want to print the bindings before they are removed from the stack.
 						std::cerr << "Bindings:" << (allocations->size() > 0 ? "" : " (None)") << std::endl;
@@ -570,9 +570,9 @@ namespace Epilog {
 					if (DEBUG) {
 						error.print();
 					}
-					if (Runtime::topChoicePoint != -1UL) {
+					if (Runtime::currentRuntime->topChoicePoint != -1UL) {
 						// Backtrack to the previous choice point
-						Runtime::nextInstruction = Runtime::currentChoicePoint()->nextClause;
+						Runtime::currentRuntime->nextInstruction = Runtime::currentRuntime->currentChoicePoint()->nextClause;
 					} else {
 						throw;
 					}

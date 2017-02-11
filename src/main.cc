@@ -23,6 +23,8 @@ int main(int argc, char* argv[]) {
 		if (parser.parse(input, parser.grammar.clauses, parser.grammar.ignored, pegmatite::defaultErrorReporter, root)) {
 			try {
 				Interpreter::Context context;
+				Runtime mainRuntime;
+				Runtime::currentRuntime = &mainRuntime;
 				root->interpret(context);
 				std::cout << "true." << std::endl;
 			} catch (const Epilog::UnificationError& error) {

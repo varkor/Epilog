@@ -45,7 +45,7 @@ namespace Epilog {
 		UnificationError(std::string message, std::string file, std::string function, int64_t line) : RuntimeException(message, file, function, line) { }
 	};
 	
-	enum Mode { read, write };
+	enum class Mode { read, write };
 	
 	struct HeapContainer {
 		// Ensure HeapContainer is polymorphic, so that we can use dynamic_cast
@@ -235,66 +235,70 @@ namespace Epilog {
 	
 	class Runtime {
 		public:
+		static Runtime* currentRuntime;
+		
 		// The global stack used to contain term structures used when unifying.
-		static StackHeap heap;
+		StackHeap heap;
 		
 		// The registers used to temporarily hold pointers when building queries or rules
-		static StackHeap registers;
+		StackHeap registers;
 		
 		// The instructions corresponding to the compiled program
-		static BoundsCheckedVector<Instruction> instructions;
+		BoundsCheckedVector<Instruction> instructions;
 		
 		// The stack used to store variable bindings and choice points
-		static std::vector<std::unique_ptr<StateReference>> stateStack;
+		std::vector<std::unique_ptr<StateReference>> stateStack;
 		
-		static void compressStateStack() {
+		void compressStateStack() {
 			// At the moment, the stack currently continues growing as more environments and choice points are added.
 			// The stack should instead be overwritten, so that it grows only as much as is necessary.
 		}
 		
-		static StateReference::stateIndex topEnvironment;
-		static Environment* currentEnvironment() {
+		StateReference::stateIndex topEnvironment = -1UL;
+		Environment* currentEnvironment() {
 			if (Environment* environment = dynamic_cast<Environment*>(stateStack[topEnvironment].get())) {
 				return environment;
 			} else {
 				throw RuntimeException("Tried to access a choice point as an environment.", __FILENAME__, __func__, __LINE__);
 			}
 		}
-		static void popTopEnvironment() {
+		void popTopEnvironment() {
 			topEnvironment = currentEnvironment()->previousEnvironment;
 			compressStateStack();
 		}
 		
-		static std::vector<std::shared_ptr<StateReference>>::size_type topChoicePoint;
-		static ChoicePoint* currentChoicePoint() {
+		std::vector<std::shared_ptr<StateReference>>::size_type topChoicePoint = -1UL;
+		ChoicePoint* currentChoicePoint() {
 			if (ChoicePoint* choicePoint = dynamic_cast<ChoicePoint*>(stateStack[topChoicePoint].get())) {
 				return choicePoint;
 			} else {
 				throw RuntimeException("Tried to access an environment as a choice point.", __FILENAME__, __func__, __LINE__);
 			}
 		}
-		static void popTopChoicePoint() {
+		void popTopChoicePoint() {
 			ChoicePoint* choicePoint = currentChoicePoint();
 			topEnvironment = choicePoint->environment;
 			topChoicePoint = choicePoint->previousChoicePoint;
 			compressStateStack();
 		}
 		
-		static int64_t currentNumberOfArguments;
+		int64_t currentNumberOfArguments = 0;
 		
 		// The stack used to contain the variables to unbind when backtracking
-		static std::vector<HeapReference> trail;
+		std::vector<HeapReference> trail;
 		
 		// Labels with which a particular instruction can be jumped to
-		static std::unordered_map<std::string, Instruction::instructionReference> labels;
+		std::unordered_map<std::string, Instruction::instructionReference> labels;
 		
-		static Instruction::instructionReference nextInstruction;
+		Instruction::instructionReference nextInstruction;
 		
-		static Instruction::instructionReference nextGoal;
+		Instruction::instructionReference nextGoal;
 		
-		static Mode mode;
+		Mode mode;
 		
-		static HeapReference::heapIndex unificationIndex;
+		HeapReference::heapIndex unificationIndex;
+		
+		Runtime() { }
 	};
 	
 	struct PushCompoundTermInstruction: Instruction {
