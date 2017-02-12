@@ -13,7 +13,7 @@ namespace Epilog {
 	Instruction::instructionReference pushInstruction(Interpreter::Context& context, Instruction* instruction) {
 		Instruction::instructionReference instructionAddress = context.insertionAddress;
 		if (instruction != nullptr) {
-			Runtime::currentRuntime->instructions.insert(Runtime::currentRuntime->instructions.begin() + (context.insertionAddress ++), std::unique_ptr<Instruction>(instruction));
+			Runtime::currentRuntime->instructions->insert(Runtime::currentRuntime->instructions->begin() + (context.insertionAddress ++), std::unique_ptr<Instruction>(instruction));
 		}
 		return instructionAddress;
 	}
@@ -92,7 +92,7 @@ namespace Epilog {
 		{ "evaluate", [] {
 			HeapTuple* tuple;
 			if ((tuple = dynamic_cast<HeapTuple*>(Runtime::currentRuntime->registers[1].get()))) {
-				if (PushNumberInstruction* instruction = dynamic_cast<PushNumberInstruction*>(Runtime::currentRuntime->instructions[Runtime::currentRuntime->nextInstruction + 1].get())) {
+				if (PushNumberInstruction* instruction = dynamic_cast<PushNumberInstruction*>((*Runtime::currentRuntime->instructions)[Runtime::currentRuntime->nextInstruction + 1].get())) {
 					instruction->number.value = evaluateCompoundTerm(dereference(HeapReference(StorageArea::reg, 1)));
 					return;
 				} else {
@@ -305,7 +305,7 @@ namespace Epilog {
 		
 		typedef typename std::function<Instruction*(std::shared_ptr<TermNode>, std::unordered_map<std::string, HeapReference>&)> instructionGenerator;
 		
-		std::pair<BoundsCheckedVector<Instruction>::size_type, std::unordered_map<std::string, HeapReference>> generateInstructionsForClause(Interpreter::Context& context, bool dependentAllocations, std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> permanence, std::unordered_set<std::string>& encounters, CompoundTerm* head, instructionGenerator unseenArgumentVariable, instructionGenerator unseenRegisterVariable, instructionGenerator seenArgumentVariable, instructionGenerator seenRegisterVariable, instructionGenerator compoundTerm, instructionGenerator number, instructionGenerator conclusion) {
+		std::pair<Instruction::instructionReference, std::unordered_map<std::string, HeapReference>> generateInstructionsForClause(Interpreter::Context& context, bool dependentAllocations, std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> permanence, std::unordered_set<std::string>& encounters, CompoundTerm* head, instructionGenerator unseenArgumentVariable, instructionGenerator unseenRegisterVariable, instructionGenerator seenArgumentVariable, instructionGenerator seenRegisterVariable, instructionGenerator compoundTerm, instructionGenerator number, instructionGenerator conclusion) {
 			
 			auto tuple = buildAllocationTree(permanence, head);
 			std::shared_ptr<TermNode> root(std::get<0>(tuple));
@@ -320,7 +320,7 @@ namespace Epilog {
 				}
 			}
 			
-			BoundsCheckedVector<Instruction>::size_type startAddress = Runtime::currentRuntime->instructions.size();
+			Instruction::instructionReference startAddress = Runtime::currentRuntime->instructions->size();
 			
 			// Use the runtime instructions to build this structure on the heap
 			while (Runtime::currentRuntime->registers.size() < registers.size()) {
@@ -415,7 +415,7 @@ namespace Epilog {
 			}
 		}
 		
-		std::pair<BoundsCheckedVector<Instruction>::size_type, std::unordered_map<std::string, HeapReference>> generateHeadInstructionsForClause(Interpreter::Context& context, std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> permanence, std::unordered_set<std::string>& encounters, CompoundTerm* head, bool proceedAtEnd) {
+		std::pair<Instruction::instructionReference, std::unordered_map<std::string, HeapReference>> generateHeadInstructionsForClause(Interpreter::Context& context, std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> permanence, std::unordered_set<std::string>& encounters, CompoundTerm* head, bool proceedAtEnd) {
 			auto unseenArgumentVariable = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new CopyArgumentToRegisterInstruction(allocations[node->symbol], node->reg); };
 			auto unseenRegisterVariable = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new UnifyVariableInstruction(node->reg); };
 			auto seenArgumentVariable = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new UnifyRegisterAndArgumentInstruction(allocations[node->symbol], node->reg); };
@@ -432,7 +432,7 @@ namespace Epilog {
 			return generateInstructionsForClause(context, false, permanence, encounters, head, unseenArgumentVariable, unseenRegisterVariable, seenArgumentVariable, seenRegisterVariable, compoundTerm, number, conclusion);
 		}
 		
-		std::pair<BoundsCheckedVector<Instruction>::size_type, std::unordered_map<std::string, HeapReference>> generateBodyInstructionsForClause(Interpreter::Context& context, std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> permanence, std::unordered_set<std::string>& encounters, CompoundTerm* head) {
+		std::pair<Instruction::instructionReference, std::unordered_map<std::string, HeapReference>> generateBodyInstructionsForClause(Interpreter::Context& context, std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> permanence, std::unordered_set<std::string>& encounters, CompoundTerm* head) {
 			auto unseenArgumentVariable = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new PushVariableToAllInstruction(allocations[node->symbol], node->reg); };
 			auto unseenRegisterVariable = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new PushVariableInstruction(node->reg); };
 			auto seenArgumentVariable = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new CopyRegisterToArgumentInstruction(allocations[node->symbol], node->reg); };
@@ -444,7 +444,7 @@ namespace Epilog {
 			return generateInstructionsForClause(context, true, permanence, encounters, head, unseenArgumentVariable, unseenRegisterVariable, seenArgumentVariable, seenRegisterVariable, compoundTerm, number, conclusion);
 		}
 		
-		std::pair<BoundsCheckedVector<Instruction>::size_type, std::unordered_map<std::string, HeapReference>> generateInstructionsForRule(Interpreter::Context& context, CompoundTerm* head, pegmatite::ASTList<CompoundTerm>* goals) {
+		std::pair<Instruction::instructionReference, std::unordered_map<std::string, HeapReference>> generateInstructionsForRule(Interpreter::Context& context, CompoundTerm* head, pegmatite::ASTList<CompoundTerm>* goals) {
 			// Replace syntactic sugar in each of the clauses with its expanded form.
 			removeSyntacticSugar(head);
 			if (goals != nullptr) {
@@ -454,7 +454,7 @@ namespace Epilog {
 			}
 			
 			auto permanence = findVariablePermanence(head, goals, head == nullptr);
-			auto startAddress = context.insertionAddress = Runtime::currentRuntime->instructions.size();
+			auto startAddress = context.insertionAddress = Runtime::currentRuntime->instructions->size();
 			
 			if (DEBUG) {
 				std::cerr << "Permanent register allocation:" << (permanence.second.size() > 0 ? "" : " (None)") << std::endl;
@@ -482,11 +482,11 @@ namespace Epilog {
 					if (functorClause.startAddresses.size() == 1) {
 						// A single clause with this functor has been defined.
 						context.insertionAddress = functorClause.endAddress + 1;
-						Runtime::currentRuntime->instructions.insert(Runtime::currentRuntime->instructions.begin() + functorClause.startAddresses.front(), std::unique_ptr<Instruction>(new TryInitialClauseInstruction(context.insertionAddress)));
+						Runtime::currentRuntime->instructions->insert(Runtime::currentRuntime->instructions->begin() + functorClause.startAddresses.front(), std::unique_ptr<Instruction>(new TryInitialClauseInstruction(context.insertionAddress)));
 					} else {
 						// Functors with this clause have already been defined.
 						context.insertionAddress = functorClause.endAddress;
-						Runtime::currentRuntime->instructions[functorClause.startAddresses.back()] = std::unique_ptr<Instruction>(new TryIntermediateClauseInstruction(context.insertionAddress));
+						(*Runtime::currentRuntime->instructions)[functorClause.startAddresses.back()] = std::unique_ptr<Instruction>(new TryIntermediateClauseInstruction(context.insertionAddress));
 					}
 					// Change the insertion position
 					startAddress = context.insertionAddress;
@@ -512,7 +512,7 @@ namespace Epilog {
 				std::string symbol = head->name + "/" + std::to_string(head->parameterList->parameters.size());
 				context.functorClauses.find(symbol)->second.endAddress = context.insertionAddress;
 				// Offset labels and start addresses of any clauses whose instructions were displaced by inserting this new clause
-				if (context.insertionAddress != Runtime::currentRuntime->instructions.size()) {
+				if (context.insertionAddress != Runtime::currentRuntime->instructions->size()) {
 					auto offset = context.insertionAddress - startAddress;
 					for (auto& label : Runtime::currentRuntime->labels) {
 						if (label.second > startAddress) {
@@ -535,7 +535,7 @@ namespace Epilog {
 			if (DEBUG) {
 				std::cerr << "Instructions:" << (context.insertionAddress - startAddress > 0 ? "" : " (None)") << std::endl;
 				for (auto i = startAddress; i < context.insertionAddress; ++ i) {
-					std::unique_ptr<Instruction>& instruction = Runtime::currentRuntime->instructions[i]; 
+					std::shared_ptr<Instruction>& instruction = (*Runtime::currentRuntime->instructions)[i]; 
 					std::cerr << "\t" << instruction->toString() << std::endl;
 				}
 				std::cerr << std::endl;
@@ -544,18 +544,19 @@ namespace Epilog {
 			return std::make_pair(startAddress, permanence.second);
 		}
 		
-		void executeInstructions(BoundsCheckedVector<Instruction>::size_type startAddress, std::unordered_map<std::string, HeapReference>* allocations) {
+		void executeInstructions(Instruction::instructionReference startAddress, Instruction::instructionReference endAddress, std::unordered_map<std::string, HeapReference>* allocations) {
 			// Execute the instructions
 			Runtime::currentRuntime->nextInstruction = startAddress;
-			Runtime::currentRuntime->nextGoal = Runtime::currentRuntime->instructions.size();
+			Runtime::currentRuntime->nextGoal = Runtime::currentRuntime->instructions->size();
 			if (DEBUG) {
-				std::cerr << "Execute:" << (Runtime::currentRuntime->nextInstruction < Runtime::currentRuntime->instructions.size() ? "" : " (None)") << std::endl;
+				std::cerr << "Execute:" << (Runtime::currentRuntime->nextInstruction < Runtime::currentRuntime->instructions->size() ? "" : " (None)") << std::endl;
 			}
-			while (Runtime::currentRuntime->nextInstruction < Runtime::currentRuntime->instructions.size()) {
-				std::unique_ptr<Instruction>& instruction = Runtime::currentRuntime->instructions[Runtime::currentRuntime->nextInstruction];
+			while (Runtime::currentRuntime->nextInstruction < Runtime::currentRuntime->instructions->size()) {
+				Instruction::instructionReference currentInstruction = Runtime::currentRuntime->nextInstruction;
+				std::shared_ptr<Instruction>& instruction = (*Runtime::currentRuntime->instructions)[currentInstruction];
 				if (DEBUG) {
 					std::cerr << "\t" << instruction->toString() << std::endl;
-					if (allocations != nullptr && Runtime::currentRuntime->nextInstruction == Runtime::currentRuntime->instructions.size() - 1) {
+					if (allocations != nullptr && Runtime::currentRuntime->nextInstruction == Runtime::currentRuntime->instructions->size() - 1) {
 						// The last instruction is always a deallocate.
 						// We want to print the bindings before they are removed from the stack.
 						std::cerr << "Bindings:" << (allocations->size() > 0 ? "" : " (None)") << std::endl;
@@ -576,6 +577,9 @@ namespace Epilog {
 					} else {
 						throw;
 					}
+				}
+				if (currentInstruction == endAddress) {
+					break;
 				}
 			}
 		}
@@ -601,7 +605,8 @@ namespace Epilog {
 			auto pair = generateInstructionsForRule(context, nullptr, &body->goals);
 			auto startAddress = pair.first;
 			auto allocations = pair.second;
-			executeInstructions(startAddress, &allocations);
+			// When queries are executed, they're always the last set of instructions on the stack, so the endAddress is equal to the last instruction.
+			executeInstructions(startAddress, Runtime::currentRuntime->instructions->size() - 1, &allocations);
 		}
 	}
 }

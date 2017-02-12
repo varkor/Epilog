@@ -178,17 +178,23 @@ namespace Epilog {
 	HeapReference dereference(const HeapReference& reference);
 	
 	template <class T>
-	class BoundsCheckedVector: public std::vector<std::unique_ptr<T>> {
+	class BoundsCheckedVector: public std::vector<T> {
 		public:
-		std::unique_ptr<T>& operator[] (const typename std::vector<std::unique_ptr<T>>::size_type index) {
+		T& operator[] (const typename std::vector<T>::size_type index) {
 			if (index >= this->size()) {
 				throw RuntimeException("Tried to access a vector index out of bounds.", __FILENAME__, __func__, __LINE__);
 			}
-			return std::vector<std::unique_ptr<T>>::operator[](index);
+			return std::vector<T>::operator[](index);
 		}
 	};
 	
-	class StackHeap: public BoundsCheckedVector<HeapContainer> {
+	template <class T>
+	class BoundsCheckedUniqueVector: public BoundsCheckedVector<std::unique_ptr<T>> { };
+	
+	template <class T>
+	class BoundsCheckedSharedVector: public BoundsCheckedVector<std::shared_ptr<T>> { };
+	
+	class StackHeap: public BoundsCheckedUniqueVector<HeapContainer> {
 		public:
 		void print() {
 			for (HeapReference::heapIndex i = 0; i < size(); ++ i) {
@@ -244,7 +250,7 @@ namespace Epilog {
 		StackHeap registers;
 		
 		// The instructions corresponding to the compiled program
-		BoundsCheckedVector<Instruction> instructions;
+		std::shared_ptr<BoundsCheckedSharedVector<Instruction>> instructions;
 		
 		// The stack used to store variable bindings and choice points
 		std::vector<std::unique_ptr<StateReference>> stateStack;
@@ -298,7 +304,18 @@ namespace Epilog {
 		
 		HeapReference::heapIndex unificationIndex;
 		
-		Runtime() { }
+		Runtime() {
+			instructions.reset(new BoundsCheckedSharedVector<Instruction>);
+		}
+		
+		Runtime(Runtime& other) {
+			instructions = other.instructions;
+			labels = other.labels;
+			// Make sure we don't overflow the number of Epilog registers.
+			while (registers.size() < other.registers.size()) {
+				registers.push_back(nullptr);
+			}
+		}
 	};
 	
 	struct PushCompoundTermInstruction: Instruction {
