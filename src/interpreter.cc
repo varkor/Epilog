@@ -76,6 +76,13 @@ namespace Epilog {
 				}
 				return sum;
 			}
+			if (name == "*" && functor->parameters > 1) {
+				int64_t product = 1;
+				for (int64_t i = 0; i < functor->parameters; ++ i) {
+					product *= evaluateCompoundTerm(dereference(HeapReference(StorageArea::heap, reference.index + (i + 1))));
+				}
+				return product;
+			}
 			throw RuntimeException("Tried to evaluate a functor that is not a recognised operation.", __FILENAME__, __func__, __LINE__);
 		} else if (HeapNumber* number = dynamic_cast<HeapNumber*>(container)) {
 			return number->value;
