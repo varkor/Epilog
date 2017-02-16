@@ -51,7 +51,12 @@ namespace Epilog {
 		{ "fail/0", [] (Interpreter::Context& context, HeapReference::heapIndex& registers) {
 			// This call instruction will always fail, so there is no need for a following proceed instruction.
 			pushInstruction(context, new CallInstruction(HeapFunctor("", 0)));
-		} }
+		} },
+		{ "=/2", [] (Interpreter::Context& context, HeapReference::heapIndex& registers) {
+			pushInstruction(context, new UnifyRegisterAndArgumentInstruction(HeapReference(StorageArea::reg, 0), HeapReference(StorageArea::reg, 1)));
+			pushInstruction(context, new ProceedInstruction());
+			registers = 2;
+		} },
 	};
 	
 	int64_t evaluateCompoundTerm(HeapReference reference) {
