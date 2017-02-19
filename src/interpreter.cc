@@ -102,8 +102,7 @@ namespace Epilog {
 			std::cout << Runtime::currentRuntime->registers[0]->trace();
 		} },
 		{ "evaluate", [] {
-			HeapTuple* tuple;
-			if ((tuple = dynamic_cast<HeapTuple*>(Runtime::currentRuntime->registers[1].get()))) {
+			if (dynamic_cast<HeapTuple*>(Runtime::currentRuntime->registers[1].get()) || dynamic_cast<HeapNumber*>(Runtime::currentRuntime->registers[1].get())) {
 				if (PushNumberInstruction* instruction = dynamic_cast<PushNumberInstruction*>((*Runtime::currentRuntime->instructions)[Runtime::currentRuntime->nextInstruction + 1].get())) {
 					instruction->number.value = evaluateCompoundTerm(dereference(HeapReference(StorageArea::reg, 1)));
 					return;
@@ -117,6 +116,17 @@ namespace Epilog {
 	};
 	
 	namespace AST {
+		struct CompoundTermWrapper: Printable {
+			CompoundTerm* compoundTerm;
+			Modifier* modifier;
+			
+			CompoundTermWrapper(CompoundTerm* compoundTerm, Modifier* modifier) : compoundTerm(compoundTerm), modifier(modifier) { }
+			
+			std::string toString() const override {
+				return (modifier != nullptr ? *modifier : std::string()) + compoundTerm->toString();
+			}
+		};
+		
 		struct TermNode {
 			Term* term;
 			std::shared_ptr<TermNode> parent;
@@ -138,7 +148,7 @@ namespace Epilog {
 			}
 		}
 		
-		std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> findVariablePermanence(CompoundTerm* head, pegmatite::ASTList<CompoundTerm>* goals, bool forcePermanence) {
+		std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> findVariablePermanence(CompoundTerm* head, pegmatite::ASTList<EnrichedCompoundTerm>* goals, bool forcePermanence) {
 			std::unordered_map<std::string, int64_t> appearances;
 			std::queue<CompoundTerm*> clauses;
 			std::queue<Term*> terms;
@@ -146,8 +156,8 @@ namespace Epilog {
 				clauses.push(head);
 			}
 			if (goals != nullptr) {
-				for (std::unique_ptr<CompoundTerm>& goal : *goals) {
-					clauses.push(goal.get());
+				for (std::unique_ptr<EnrichedCompoundTerm>& goal : *goals) {
+					clauses.push(goal->compoundTerm.get());
 				}
 			}
 			while (!clauses.empty()) {
@@ -317,15 +327,15 @@ namespace Epilog {
 		
 		typedef typename std::function<Instruction*(std::shared_ptr<TermNode>, std::unordered_map<std::string, HeapReference>&)> instructionGenerator;
 		
-		std::pair<Instruction::instructionReference, std::unordered_map<std::string, HeapReference>> generateInstructionsForClause(Interpreter::Context& context, bool dependentAllocations, std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> permanence, std::unordered_set<std::string>& encounters, CompoundTerm* head, instructionGenerator unseenArgumentVariable, instructionGenerator unseenRegisterVariable, instructionGenerator seenArgumentVariable, instructionGenerator seenRegisterVariable, instructionGenerator compoundTerm, instructionGenerator number, instructionGenerator conclusion) {
+		std::pair<Instruction::instructionReference, std::unordered_map<std::string, HeapReference>> generateInstructionsForClause(Interpreter::Context& context, bool dependentAllocations, std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> permanence, std::unordered_set<std::string>& encounters, CompoundTermWrapper& wrapper, instructionGenerator unseenArgumentVariable, instructionGenerator unseenRegisterVariable, instructionGenerator seenArgumentVariable, instructionGenerator seenRegisterVariable, instructionGenerator compoundTerm, instructionGenerator number, instructionGenerator conclusion) {
 			
-			auto tuple = buildAllocationTree(permanence, head);
+			auto tuple = buildAllocationTree(permanence, wrapper.compoundTerm);
 			std::shared_ptr<TermNode> root(std::get<0>(tuple));
 			std::vector<std::shared_ptr<TermNode>> registers(std::get<1>(tuple));
 			std::unordered_map<std::string, HeapReference> allocations = std::get<2>(tuple);
 			
 			if (DEBUG) {
-				std::cerr << "Temporary register allocation for clause " << head->toString() << ":" << (registers.size() > 0 ? "" : " (None)") << std::endl;
+				std::cerr << "Temporary register allocation for clause " <<  wrapper.toString() << ":" << (registers.size() > 0 ? "" : " (None)") << std::endl;
 				for (std::vector<std::shared_ptr<TermNode>>::size_type i = 0; i < registers.size(); ++ i) {
 					std::shared_ptr<TermNode> node(registers[i]);
 					std::cerr << "\t" << (node->parent != nullptr && node->parent->parent != nullptr ? "T" : "A") << i << "(" << node->name << ")" << std::endl;
@@ -396,7 +406,13 @@ namespace Epilog {
 					throw CompilationException("Found a term of an unknown type in the query.", __FILENAME__, __func__, __LINE__);
 				}
 			}
-			pushInstruction(context, conclusion(root, allocations));
+			Instruction* conclusionInstruction = conclusion(root, allocations);
+			CallInstruction* callInstruction;
+			if (wrapper.modifier != nullptr && (callInstruction = dynamic_cast<CallInstruction*>(conclusionInstruction))) {
+				callInstruction->modifier = *wrapper.modifier;
+			}
+			pushInstruction(context, conclusionInstruction);
+			
 			
 			return std::make_pair(startAddress, allocations);
 		}
@@ -441,10 +457,11 @@ namespace Epilog {
 				conclusion = [] (std::shared_ptr<TermNode> root, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return nullptr; };
 			}
 			
-			return generateInstructionsForClause(context, false, permanence, encounters, head, unseenArgumentVariable, unseenRegisterVariable, seenArgumentVariable, seenRegisterVariable, compoundTerm, number, conclusion);
+			CompoundTermWrapper wrapper(head, nullptr);
+			return generateInstructionsForClause(context, false, permanence, encounters, wrapper, unseenArgumentVariable, unseenRegisterVariable, seenArgumentVariable, seenRegisterVariable, compoundTerm, number, conclusion);
 		}
 		
-		std::pair<Instruction::instructionReference, std::unordered_map<std::string, HeapReference>> generateBodyInstructionsForClause(Interpreter::Context& context, std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> permanence, std::unordered_set<std::string>& encounters, CompoundTerm* head) {
+		std::pair<Instruction::instructionReference, std::unordered_map<std::string, HeapReference>> generateBodyInstructionsForClause(Interpreter::Context& context, std::pair<std::unordered_set<std::string>, std::unordered_map<std::string, HeapReference>> permanence, std::unordered_set<std::string>& encounters, EnrichedCompoundTerm* head) {
 			auto unseenArgumentVariable = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new PushVariableToAllInstruction(allocations[node->symbol], node->reg); };
 			auto unseenRegisterVariable = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new PushVariableInstruction(node->reg); };
 			auto seenArgumentVariable = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new CopyRegisterToArgumentInstruction(allocations[node->symbol], node->reg); };
@@ -453,15 +470,16 @@ namespace Epilog {
 			auto number = [] (std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new PushNumberInstruction(HeapNumber(node->value), node->reg); };
 			auto conclusion = [] (std::shared_ptr<TermNode> root, std::unordered_map<std::string, HeapReference>& allocations) -> Instruction* { return new CallInstruction(HeapFunctor(root->name, root->children.size())); };
 			
-			return generateInstructionsForClause(context, true, permanence, encounters, head, unseenArgumentVariable, unseenRegisterVariable, seenArgumentVariable, seenRegisterVariable, compoundTerm, number, conclusion);
+			CompoundTermWrapper wrapper(head->compoundTerm.get(), head->modifier.get());
+			return generateInstructionsForClause(context, true, permanence, encounters, wrapper, unseenArgumentVariable, unseenRegisterVariable, seenArgumentVariable, seenRegisterVariable, compoundTerm, number, conclusion);
 		}
 		
-		std::pair<Instruction::instructionReference, std::unordered_map<std::string, HeapReference>> generateInstructionsForRule(Interpreter::Context& context, CompoundTerm* head, pegmatite::ASTList<CompoundTerm>* goals) {
+		std::pair<Instruction::instructionReference, std::unordered_map<std::string, HeapReference>> generateInstructionsForRule(Interpreter::Context& context, CompoundTerm* head, pegmatite::ASTList<EnrichedCompoundTerm>* goals) {
 			// Replace syntactic sugar in each of the clauses with its expanded form.
 			removeSyntacticSugar(head);
 			if (goals != nullptr) {
 				for (auto it = goals->begin(); it != goals->end(); ++ it) {
-					removeSyntacticSugar(it->get());
+					removeSyntacticSugar((*it)->compoundTerm.get());
 				}
 			}
 			
@@ -584,8 +602,21 @@ namespace Epilog {
 						error.print();
 					}
 					if (Runtime::currentRuntime->topChoicePoint != -1UL) {
-						// Backtrack to the previous choice point
+						// Backtrack to the previous choice point.
 						Runtime::currentRuntime->nextInstruction = Runtime::currentRuntime->currentChoicePoint()->nextClause;
+					} else {
+						// Check that there is not a modifier that might alter execution flow: for example, inverting unification (in the case of the \+ operator).
+						if (Runtime::currentRuntime->modifier == "\\+" && !error.forceful) {
+							// Successfully unify.
+							Runtime::currentRuntime->nextInstruction = Runtime::currentRuntime->nextGoal;
+						} else {
+							throw;
+						}
+					}
+				} catch (const RuntimeException& exception) {
+					// The catch modifier causes successful unification if a runtime error is thrown.
+					if (Runtime::currentRuntime->modifier == "\\:" && !exception.forceful) {
+						Runtime::currentRuntime->nextInstruction = Runtime::currentRuntime->nextGoal;
 					} else {
 						throw;
 					}

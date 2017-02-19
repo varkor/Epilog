@@ -64,8 +64,13 @@ namespace Epilog {
 			// A set of empty brackets `()` is equivalent to having no brackets at all.
 			Rule compoundTerm = identifier >> parameters;
 			
+			Rule modifier = "\\+"_E | "\\:";
+			
+			// Enriched compound term: a compound term that optionally has a modifier, such as \+ (not), which modifies the unification method for that term.
+			Rule enrichedCompoundTerm = (-modifier) >> compoundTerm;
+			
 			// Compound terms: a series of goals.
-			Rule compoundTerms = compoundTerm >> *(',' >> compoundTerm);
+			Rule compoundTerms = enrichedCompoundTerm >> *(',' >> enrichedCompoundTerm);
 			
 			// Fact.
 			Rule fact = compoundTerm;

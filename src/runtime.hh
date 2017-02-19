@@ -37,12 +37,18 @@ namespace Epilog {
 	
 	class RuntimeException: public Exception {
 		public:
+		bool forceful = false;
+		
 		RuntimeException(std::string message, std::string file, std::string function, int64_t line) : Exception(message, file, function, line, 2) { }
+		
+		RuntimeException(std::string message, bool forceful, std::string file, std::string function, int64_t line) : Exception(message, file, function, line, 2), forceful(forceful) { }
 	};
 	
 	class UnificationError: public RuntimeException {
 		public:
 		UnificationError(std::string message, std::string file, std::string function, int64_t line) : RuntimeException(message, file, function, line) { }
+		
+		UnificationError(std::string message, bool forceful, std::string file, std::string function, int64_t line) : RuntimeException(message, forceful, file, function, line) { }
 	};
 	
 	enum class Mode { read, write };
@@ -223,8 +229,9 @@ namespace Epilog {
 		StateReference::stateIndex previousEnvironment;
 		Instruction::instructionReference nextGoal;
 		StackHeap variables;
+		std::string modifier;
 		
-		Environment(Instruction::instructionReference nextGoal) : nextGoal(nextGoal) {}
+		Environment(Instruction::instructionReference nextGoal, std::string modifier) : nextGoal(nextGoal), modifier(modifier) {}
 	};
 	
 	struct ChoicePoint: StateReference {
@@ -303,6 +310,8 @@ namespace Epilog {
 		Mode mode;
 		
 		HeapReference::heapIndex unificationIndex;
+		
+		std::string modifier;
 		
 		Runtime() {
 			instructions.reset(new BoundsCheckedSharedVector<Instruction>);
@@ -472,13 +481,14 @@ namespace Epilog {
 	
 	struct CallInstruction: Instruction {
 		HeapFunctor functor;
+		std::string modifier;
 		
 		CallInstruction(const HeapFunctor functor) : functor(functor) { }
 		
 		virtual void execute() override;
 		
 		virtual std::string toString() const override {
-			return "call " + functor.name + "/" + std::to_string(functor.parameters);
+			return "call " + modifier + functor.name + "/" + std::to_string(functor.parameters);
 		}
 	};
 	

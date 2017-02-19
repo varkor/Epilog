@@ -5,17 +5,26 @@
 #include "runtime.hh"
 #include "interpreter.hh"
 
+#define POLYMORPHIC(class) \
+	virtual ~class() = default;\
+	class() = default;\
+	class(const class&) = default;\
+	class& operator=(const class& other) = default;
+
 namespace Epilog {
 	namespace Parser {
 		class EpilogParser;
 	}
 	
 	namespace AST {
-		// Abstract superclass for all terms.
-		class Term: public pegmatite::ASTContainer {
-			public:
+		struct Printable {
+			POLYMORPHIC(Printable)
+			
 			virtual std::string toString() const = 0;
 		};
+		
+		// Abstract superclass for all terms.
+		class Term: public pegmatite::ASTContainer, public Printable { };
 		
 		std::string normaliseIdentifierName(std::string);
 		
@@ -30,6 +39,8 @@ namespace Epilog {
 			public:
 			pegmatite::ASTList<Term> parameters;
 		};
+		
+		class Modifier: public pegmatite::ASTString { };
 		
 		class CompoundTerm: public Term {
 			public:
@@ -47,11 +58,21 @@ namespace Epilog {
 			}
 		};
 		
-		class Body: public pegmatite::ASTContainer {
+		class EnrichedCompoundTerm: public pegmatite::ASTContainer, public Printable {
 			public:
-			pegmatite::ASTList<CompoundTerm> goals;
+			pegmatite::ASTPtr<Modifier, true> modifier;
+			pegmatite::ASTPtr<CompoundTerm> compoundTerm;
 			
-			std::string toString() const {
+			std::string toString() const override {
+				return (modifier != nullptr ? *modifier : std::string()) + compoundTerm->toString();
+			}
+		};
+		
+		class Body: public pegmatite::ASTContainer, public Printable {
+			public:
+			pegmatite::ASTList<EnrichedCompoundTerm> goals;
+			
+			std::string toString() const override {
 				std::string compoundTerms;
 				bool first = true;
 				for (auto& goal : goals) {

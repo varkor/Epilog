@@ -301,6 +301,7 @@ namespace Epilog {
 	}
 	
 	void CallInstruction::execute() {
+		Runtime::currentRuntime->modifier = modifier;
 		std::string label = functor.toString();
 		if (Runtime::currentRuntime->labels.find(label) != Runtime::currentRuntime->labels.end()) {
 			Runtime::currentRuntime->nextGoal = Runtime::currentRuntime->nextInstruction + 1;
@@ -312,11 +313,17 @@ namespace Epilog {
 	}
 	
 	void ProceedInstruction::execute() {
+		if (Runtime::currentRuntime->modifier == "\\+") {
+			throw UnificationError("Successfully unified within not.", true, __FILENAME__, __func__, __LINE__);
+		}
+		if (Runtime::currentRuntime->modifier == "\\:") {
+			throw UnificationError("Successfully unified within catch.", true, __FILENAME__, __func__, __LINE__);
+		}
 		Runtime::currentRuntime->nextInstruction = Runtime::currentRuntime->nextGoal;
 	}
 	
 	void AllocateInstruction::execute() {
-		std::unique_ptr<Environment> environment(new Environment(Runtime::currentRuntime->nextGoal));
+		std::unique_ptr<Environment> environment(new Environment(Runtime::currentRuntime->nextGoal, Runtime::currentRuntime->modifier));
 		environment->previousEnvironment = Runtime::currentRuntime->topEnvironment;
 		for (int64_t i = 0; i < variables; ++ i) {
 			environment->variables.push_back(nullptr);
@@ -328,6 +335,7 @@ namespace Epilog {
 	
 	void DeallocateInstruction::execute() {
 		Runtime::currentRuntime->nextInstruction = Runtime::currentRuntime->currentEnvironment()->nextGoal;
+		Runtime::currentRuntime->modifier = Runtime::currentRuntime->currentEnvironment()->modifier;
 		Runtime::currentRuntime->popTopEnvironment();
 	}
 	
