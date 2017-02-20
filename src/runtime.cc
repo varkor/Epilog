@@ -303,9 +303,7 @@ namespace Epilog {
 	}
 	
 	void CallInstruction::execute() {
-		if (modifier != "") {
-			Runtime::currentRuntime->modifiers.push(std::make_pair(modifier, Runtime::currentRuntime->nextInstruction + 1));
-		}
+		Runtime::currentRuntime->modifiers.push(Modifier(modifier, Runtime::currentRuntime->nextInstruction + 1, Runtime::currentRuntime->topEnvironment, Runtime::currentRuntime->topChoicePoint));
 		std::string label = functor.toString();
 		if (Runtime::currentRuntime->labels.find(label) != Runtime::currentRuntime->labels.end()) {
 			Runtime::currentRuntime->nextGoal = Runtime::currentRuntime->nextInstruction + 1;
@@ -318,13 +316,14 @@ namespace Epilog {
 	
 	void ProceedInstruction::execute() {
 		if (!Runtime::currentRuntime->modifiers.empty()) {
-			std::string modifier(Runtime::currentRuntime->modifiers.top().first);
-			if (modifier == "\\+") {
+			Modifier& modifier(Runtime::currentRuntime->modifiers.top());
+			if (modifier.type == Modifier::Type::negate) {
 				throw UnificationError("Successfully unified within not.", true, __FILENAME__, __func__, __LINE__);
 			}
-			if (modifier == "\\:") {
+			if (modifier.type == Modifier::Type::intercept) {
 				throw UnificationError("Successfully unified within catch.", true, __FILENAME__, __func__, __LINE__);
 			}
+			// Otherwise, the modifier is empty, and we may proceed as usual.
 		}
 		Runtime::currentRuntime->nextInstruction = Runtime::currentRuntime->nextGoal;
 	}

@@ -409,7 +409,15 @@ namespace Epilog {
 			Instruction* conclusionInstruction = conclusion(root, allocations);
 			CallInstruction* callInstruction;
 			if (wrapper.modifier != nullptr && (callInstruction = dynamic_cast<CallInstruction*>(conclusionInstruction))) {
-				callInstruction->modifier = *wrapper.modifier;
+				std::string modifier(*wrapper.modifier);
+				if (modifier == "\\+") {
+					callInstruction->modifier = ::Epilog::Modifier::Type::negate;
+				} else if (modifier == "\\:") {
+					callInstruction->modifier = ::Epilog::Modifier::Type::intercept;
+				} else {
+					throw CompilationException("Found a modifier of an unknown type in the query.", __FILENAME__, __func__, __LINE__);
+				}
+				
 			}
 			pushInstruction(context, conclusionInstruction);
 			
@@ -574,14 +582,24 @@ namespace Epilog {
 			return std::make_pair(startAddress, permanence.second);
 		}
 		
-		bool modifyUnificationCondition(std::string modifierType) {
+		bool modifyUnificationCondition(::Epilog::Modifier::Type type) {
 			while (!Runtime::currentRuntime->modifiers.empty()) {
-				auto& pair(Runtime::currentRuntime->modifiers.top());
-				std::string modifier(pair.first);
-				Instruction::instructionReference nextInstruction = pair.second;
+				auto modifier(Runtime::currentRuntime->modifiers.top());
 				Runtime::currentRuntime->modifiers.pop();
-				if (modifier == modifierType) {
-					Runtime::currentRuntime->nextInstruction = nextInstruction;
+				if (modifier.type == type) {
+					while (true) {
+						StateReference::stateIndex topEnvironment = Runtime::currentRuntime->topEnvironment;
+						StateReference::stateIndex topChoicePoint = Runtime::currentRuntime->topChoicePoint;
+						if (topEnvironment != -1UL && (topChoicePoint == -1UL || topEnvironment > topChoicePoint) && topEnvironment != modifier.topEnvironment) {
+							Runtime::currentRuntime->topEnvironment = modifier.topEnvironment;
+						} else if (topChoicePoint != -1UL && topChoicePoint != modifier.topChoicePoint) {
+							Runtime::currentRuntime->topChoicePoint = modifier.topChoicePoint;
+						} else {
+							break;
+						}
+					}
+					Runtime::currentRuntime->compressStateStack();
+					Runtime::currentRuntime->nextInstruction = modifier.nextInstruction;
 					return true;
 				}
 			}
@@ -620,13 +638,13 @@ namespace Epilog {
 						Runtime::currentRuntime->nextInstruction = Runtime::currentRuntime->currentChoicePoint()->nextClause;
 					} else {
 						// Check that there is not a modifier that might alter execution flow: for example, inverting unification (in the case of the \+ operator).
-						if (error.forceful || !modifyUnificationCondition("\\+")) {
+						if (error.forceful || !modifyUnificationCondition(::Epilog::Modifier::Type::negate)) {
 							throw;
 						}
 					}
 				} catch (const RuntimeException& exception) {
 					// The catch modifier causes successful unification if a runtime error is thrown.
-					if (exception.forceful || !modifyUnificationCondition("\\:")) {
+					if (exception.forceful || !modifyUnificationCondition(::Epilog::Modifier::Type::intercept)) {
 						throw;
 					}
 				}

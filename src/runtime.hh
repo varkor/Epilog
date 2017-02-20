@@ -245,6 +245,16 @@ namespace Epilog {
 		ChoicePoint(StateReference::stateIndex environment, Instruction::instructionReference nextGoal, Instruction::instructionReference nextClause, std::stack<HeapReference>::size_type trailSize, HeapReference::heapIndex heapSize) : environment(environment), nextGoal(nextGoal), nextClause(nextClause), trailSize(trailSize), heapSize(heapSize) { }
 	};
 	
+	struct Modifier {
+		enum class Type { none, negate, intercept };
+		Type type;
+		Instruction::instructionReference nextInstruction;
+		StateReference::stateIndex topEnvironment;
+		StateReference::stateIndex topChoicePoint;
+		
+		Modifier(Type type, Instruction::instructionReference nextInstruction, StateReference::stateIndex topEnvironment, StateReference::stateIndex topChoicePoint) : type(type), nextInstruction(nextInstruction), topEnvironment(topEnvironment), topChoicePoint(topChoicePoint) { }
+	};
+	
 	class Runtime {
 		public:
 		static Runtime* currentRuntime;
@@ -310,7 +320,7 @@ namespace Epilog {
 		
 		HeapReference::heapIndex unificationIndex;
 		
-		std::stack<std::pair<std::string, Instruction::instructionReference>> modifiers;
+		std::stack<Modifier> modifiers;
 		
 		Runtime() {
 			instructions.reset(new BoundsCheckedSharedVector<Instruction>);
@@ -480,14 +490,14 @@ namespace Epilog {
 	
 	struct CallInstruction: Instruction {
 		HeapFunctor functor;
-		std::string modifier;
+		Modifier::Type modifier = Modifier::Type::none;
 		
 		CallInstruction(const HeapFunctor functor) : functor(functor) { }
 		
 		virtual void execute() override;
 		
 		virtual std::string toString() const override {
-			return "call " + modifier + functor.name + "/" + std::to_string(functor.parameters);
+			return "call " + std::string(modifier == Modifier::Type::negate ? "\\+" : modifier == Modifier::Type::intercept ? "\\:" : "") + functor.name + "/" + std::to_string(functor.parameters);
 		}
 	};
 	
