@@ -153,7 +153,7 @@ namespace Epilog {
 							if (numberA->value != numberB->value) {
 								throw UnificationError("Tried to unify two unequal numbers.", __FILENAME__, __func__, __LINE__);
 							}
-						} else {
+						} else if (tupleA && tupleB) {
 							HeapReference::heapIndex indexA = tupleA->reference;
 							HeapReference::heapIndex indexB = tupleB->reference;
 							HeapFunctor* functorA = dynamic_cast<HeapFunctor*>(Runtime::currentRuntime->heap[indexA].get());
@@ -170,6 +170,8 @@ namespace Epilog {
 							} else {
 								throw RuntimeException("Tried to dereference a non-functor address on the stack as a functor.", __FILENAME__, __func__, __LINE__);
 							}
+						} else {
+							throw UnificationError("Tried to unify a number with a compound term.", __FILENAME__, __func__, __LINE__);
 						}
 					}
 				} else {
