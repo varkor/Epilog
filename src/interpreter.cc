@@ -574,6 +574,20 @@ namespace Epilog {
 			return std::make_pair(startAddress, permanence.second);
 		}
 		
+		bool modifyUnificationCondition(std::string modifierType) {
+			while (!Runtime::currentRuntime->modifiers.empty()) {
+				auto& pair(Runtime::currentRuntime->modifiers.top());
+				std::string modifier(pair.first);
+				Instruction::instructionReference nextInstruction = pair.second;
+				Runtime::currentRuntime->modifiers.pop();
+				if (modifier == modifierType) {
+					Runtime::currentRuntime->nextInstruction = nextInstruction;
+					return true;
+				}
+			}
+			return false;
+		}
+		
 		void executeInstructions(Instruction::instructionReference startAddress, Instruction::instructionReference endAddress, std::unordered_map<std::string, HeapReference>* allocations) {
 			// Execute the instructions
 			Runtime::currentRuntime->nextInstruction = startAddress;
@@ -606,18 +620,13 @@ namespace Epilog {
 						Runtime::currentRuntime->nextInstruction = Runtime::currentRuntime->currentChoicePoint()->nextClause;
 					} else {
 						// Check that there is not a modifier that might alter execution flow: for example, inverting unification (in the case of the \+ operator).
-						if (Runtime::currentRuntime->modifier == "\\+" && !error.forceful) {
-							// Successfully unify.
-							Runtime::currentRuntime->nextInstruction = Runtime::currentRuntime->nextGoal;
-						} else {
+						if (error.forceful || !modifyUnificationCondition("\\+")) {
 							throw;
 						}
 					}
 				} catch (const RuntimeException& exception) {
 					// The catch modifier causes successful unification if a runtime error is thrown.
-					if (Runtime::currentRuntime->modifier == "\\:" && !exception.forceful) {
-						Runtime::currentRuntime->nextInstruction = Runtime::currentRuntime->nextGoal;
-					} else {
+					if (exception.forceful || !modifyUnificationCondition("\\:")) {
 						throw;
 					}
 				}

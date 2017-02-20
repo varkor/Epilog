@@ -229,9 +229,8 @@ namespace Epilog {
 		StateReference::stateIndex previousEnvironment;
 		Instruction::instructionReference nextGoal;
 		StackHeap variables;
-		std::string modifier;
 		
-		Environment(Instruction::instructionReference nextGoal, std::string modifier) : nextGoal(nextGoal), modifier(modifier) {}
+		Environment(Instruction::instructionReference nextGoal) : nextGoal(nextGoal) {}
 	};
 	
 	struct ChoicePoint: StateReference {
@@ -311,7 +310,7 @@ namespace Epilog {
 		
 		HeapReference::heapIndex unificationIndex;
 		
-		std::string modifier;
+		std::stack<std::pair<std::string, Instruction::instructionReference>> modifiers;
 		
 		Runtime() {
 			instructions.reset(new BoundsCheckedSharedVector<Instruction>);
