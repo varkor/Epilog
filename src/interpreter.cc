@@ -57,6 +57,26 @@ namespace Epilog {
 			pushInstruction(context, new ProceedInstruction());
 			registers = 2;
 		} },
+		{ "=</2", [] (Interpreter::Context& context, HeapReference::heapIndex& registers) {
+			pushInstruction(context, new CommandInstruction("<="));
+			pushInstruction(context, new ProceedInstruction());
+			registers = 2;
+		} },
+		{ "=>/2", [] (Interpreter::Context& context, HeapReference::heapIndex& registers) {
+			pushInstruction(context, new CommandInstruction(">="));
+			pushInstruction(context, new ProceedInstruction());
+			registers = 2;
+		} },
+		{ "</2", [] (Interpreter::Context& context, HeapReference::heapIndex& registers) {
+			pushInstruction(context, new CommandInstruction("<"));
+			pushInstruction(context, new ProceedInstruction());
+			registers = 2;
+		} },
+		{ ">/2", [] (Interpreter::Context& context, HeapReference::heapIndex& registers) {
+			pushInstruction(context, new CommandInstruction(">"));
+			pushInstruction(context, new ProceedInstruction());
+			registers = 2;
+		} }
 	};
 	
 	int64_t evaluateCompoundTerm(HeapReference reference) {
@@ -91,6 +111,12 @@ namespace Epilog {
 		}
 	}
 	
+	void compareOperands(std::function<bool(int64_t, int64_t)> comparison) {
+		if (!comparison(evaluateCompoundTerm(dereference(HeapReference(StorageArea::reg, 0))), evaluateCompoundTerm(dereference(HeapReference(StorageArea::reg, 1))))) {
+			throw UnificationError("Arithmetic comparison was not satisfied.", __FILENAME__, __func__, __LINE__);
+		}
+	}
+	
 	std::unordered_map<std::string, std::function<void()>> StandardLibrary::commands = {
 		{ "exception", [] {
 			throw RuntimeException("Tried to call a non-callable term.", __FILENAME__, __func__, __LINE__);
@@ -112,6 +138,18 @@ namespace Epilog {
 			} else {
 				throw RuntimeException("Tried to evaluate the value of a non-tuple address.", __FILENAME__, __func__, __LINE__);
 			}
+		} },
+		{ "<=", [] {
+			compareOperands(std::less_equal<int64_t>());
+		} },
+		{ ">=", [] {
+			compareOperands(std::greater_equal<int64_t>());
+		} },
+		{ "<", [] {
+			compareOperands(std::less<int64_t>());
+		} },
+		{ ">", [] {
+			compareOperands(std::greater<int64_t>());
 		} }
 	};
 	
