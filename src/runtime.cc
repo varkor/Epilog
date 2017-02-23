@@ -38,15 +38,35 @@ namespace Epilog {
 		}
 	}
 	
+	std::string listToString(HeapContainer* container, bool explicitControlCharacters) {
+		if (::Epilog::HeapTuple* tuple = dynamic_cast<::Epilog::HeapTuple*>(container)) {
+			HeapFunctor* functor;
+			if (tuple->type == HeapTuple::Type::compoundTerm && (functor = dynamic_cast<HeapFunctor*>(Runtime::currentRuntime->heap[tuple->reference].get()))) {
+				std::string symbol = functor->toString();
+				if (symbol == "./2") {
+					return ", " + Runtime::currentRuntime->heap[tuple->reference + 1]->trace(explicitControlCharacters) + listToString(Runtime::currentRuntime->heap[tuple->reference + 2].get(), explicitControlCharacters);
+				} else if (symbol == "[]/0") {
+					return "";
+				}
+			}
+		}
+		return " | " + container->trace(explicitControlCharacters);
+	}
+	
 	std::string HeapTuple::trace(bool explicitControlCharacters) const {
 		switch (type) {
 			case Type::compoundTerm: {
 				if (HeapFunctor* functor = dynamic_cast<HeapFunctor*>(Runtime::currentRuntime->heap[reference].get())) {
-					std::string parameters = "";
-					for (int64_t i = 0; i < functor->parameters; ++ i) {
-						parameters += (i > 0 ? "," : "") + Runtime::currentRuntime->heap[reference + (i + 1)]->trace(explicitControlCharacters);
+					if (functor->name == "." && functor->parameters == 2) {
+						// It's a list, so display it as one.
+						return "[" + Runtime::currentRuntime->heap[reference + 1]->trace(explicitControlCharacters) + listToString(Runtime::currentRuntime->heap[reference + 2].get(), explicitControlCharacters) + "]";
+					} else {
+						std::string parameters = "";
+						for (int64_t i = 0; i < functor->parameters; ++ i) {
+							parameters += (i > 0 ? "," : "") + Runtime::currentRuntime->heap[reference + (i + 1)]->trace(explicitControlCharacters);
+						}
+						return Runtime::currentRuntime->heap[reference]->trace(explicitControlCharacters) + (functor->parameters > 0 ? "(" + parameters + ")" : "");
 					}
-					return Runtime::currentRuntime->heap[reference]->trace(explicitControlCharacters) + (functor->parameters > 0 ? "(" + parameters + ")" : "");
 				} else {
 					throw RuntimeException("Dereferenced a structure that did not point to a functor.", __FILENAME__, __func__, __LINE__);
 				}
