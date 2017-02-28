@@ -39,18 +39,27 @@ namespace Epilog {
 	}
 	
 	std::string listToString(HeapContainer* container, bool explicitControlCharacters) {
-		if (::Epilog::HeapTuple* tuple = dynamic_cast<::Epilog::HeapTuple*>(container)) {
-			HeapFunctor* functor;
-			if (tuple->type == HeapTuple::Type::compoundTerm && (functor = dynamic_cast<HeapFunctor*>(Runtime::currentRuntime->heap[tuple->reference].get()))) {
-				std::string symbol = functor->toString();
-				if (symbol == "./2") {
-					return ", " + Runtime::currentRuntime->heap[tuple->reference + 1]->trace(explicitControlCharacters) + listToString(Runtime::currentRuntime->heap[tuple->reference + 2].get(), explicitControlCharacters);
-				} else if (symbol == "[]/0") {
-					return "";
+		std::string string;
+		HeapContainer* nextContainer = container;
+		bool reachedEnd = false;
+		bool tail = true;
+		while (!reachedEnd) {
+			reachedEnd = true;
+			if (HeapTuple* tuple = dynamic_cast<HeapTuple*>(nextContainer)) {
+				HeapFunctor* functor;
+				if (tuple->type == HeapTuple::Type::compoundTerm && (functor = dynamic_cast<HeapFunctor*>(Runtime::currentRuntime->heap[tuple->reference].get()))) {
+					std::string symbol = functor->toString();
+					if (symbol == "./2") {
+						string += ", " + Runtime::currentRuntime->heap[tuple->reference + 1]->trace(explicitControlCharacters);
+						nextContainer = Runtime::currentRuntime->heap[tuple->reference + 2].get();
+						reachedEnd = false;
+					} else if (symbol == "[]/0") {
+						tail = false;
+					}
 				}
 			}
 		}
-		return " | " + container->trace(explicitControlCharacters);
+		return string + (tail ? " | " + nextContainer->trace(explicitControlCharacters) : "");
 	}
 	
 	std::string HeapTuple::trace(bool explicitControlCharacters) const {
