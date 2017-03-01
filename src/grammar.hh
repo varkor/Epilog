@@ -100,7 +100,7 @@ namespace Epilog {
 			EpilogGrammar(EpilogGrammar const&) = delete;
 			void operator=(EpilogGrammar const&) = delete;
 			// EpilogGrammar should only be constructed via the getter.
-		private:
+			protected:
 			EpilogGrammar() {};
 		};
 	}
