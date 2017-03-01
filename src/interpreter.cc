@@ -652,8 +652,10 @@ namespace Epilog {
 				std::cerr << "Execute:" << (Runtime::currentRuntime->nextInstruction < Runtime::currentRuntime->instructions->size() ? "" : " (None)") << std::endl;
 			}
 			while (Runtime::currentRuntime->nextInstruction < Runtime::currentRuntime->instructions->size()) {
-				Instruction::instructionReference currentInstruction = Runtime::currentRuntime->nextInstruction;
-				std::shared_ptr<Instruction>& instruction = (*Runtime::currentRuntime->instructions)[currentInstruction];
+				if (Runtime::currentRuntime->nextInstruction == endAddress) {
+					break;
+				}
+				std::shared_ptr<Instruction>& instruction = (*Runtime::currentRuntime->instructions)[Runtime::currentRuntime->nextInstruction];
 				if (DEBUG) {
 					std::cerr << "\t" << instruction->toString() << std::endl;
 					if (allocations != nullptr && Runtime::currentRuntime->nextInstruction == Runtime::currentRuntime->instructions->size() - 1) {
@@ -686,9 +688,6 @@ namespace Epilog {
 						throw;
 					}
 				}
-				if (currentInstruction == endAddress) {
-					break;
-				}
 			}
 		}
 		
@@ -714,7 +713,7 @@ namespace Epilog {
 			auto startAddress = pair.first;
 			auto allocations = pair.second;
 			// When queries are executed, they're always the last set of instructions on the stack, so the endAddress is equal to the last instruction.
-			executeInstructions(startAddress, Runtime::currentRuntime->instructions->size() - 1, &allocations);
+			executeInstructions(startAddress, Runtime::currentRuntime->instructions->size(), &allocations);
 		}
 	}
 }
