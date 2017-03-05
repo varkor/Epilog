@@ -17,6 +17,20 @@ namespace Epilog {
 	}
 	
 	namespace AST {
+		class Term;
+		
+		struct TermNode {
+			Term* term;
+			std::shared_ptr<TermNode> parent;
+			HeapReference reg;
+			std::string name;
+			std::string symbol;
+			int64_t value = 0;
+			std::vector<std::shared_ptr<TermNode>> children;
+			
+			TermNode(Term* term, std::shared_ptr<TermNode> parent) : term(term), parent(parent) { }
+		};
+		
 		struct Printable {
 			POLYMORPHIC(Printable)
 			
@@ -25,6 +39,22 @@ namespace Epilog {
 		
 		// Abstract superclass for all terms.
 		class Term: public pegmatite::ASTContainer, public Printable { };
+		
+		// Dynamic terms are terms that might resolve to terms of different types (for example: compound terms, or numbers) each time they are evaluated. This is used to enable certain runtime modifications to clauses.
+		class DynamicTerm: public Term {
+			static int64_t dynamicID;
+			
+			public:
+			std::string name;
+			const std::string symbol;
+			bool usesRegister;
+			
+			virtual std::list<Instruction*> instructions(std::shared_ptr<TermNode> node, std::unordered_map<std::string, HeapReference>& allocations, bool dependentAllocations, bool argumentTerm) const = 0;
+			
+			DynamicTerm(std::string name, bool usesRegister = true) : name(name), symbol(name + ":" + std::to_string(DynamicTerm::dynamicID ++)), usesRegister(usesRegister) {
+				
+			}
+		};
 		
 		std::string normaliseIdentifierName(std::string);
 		
@@ -151,9 +181,8 @@ namespace Epilog {
 		};
 		
 		class Query: public Clause {
-			pegmatite::ASTPtr<Body> body;
-			
 			public:
+			pegmatite::ASTPtr<Body> body;
 			void interpret(Interpreter::Context& context) override;
 		};
 	}

@@ -1,8 +1,8 @@
+#pragma once
+
 #include <iomanip>
 #include <stack>
 #include <unordered_map>
-
-#pragma once
 
 #define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 
@@ -76,7 +76,9 @@ namespace Epilog {
 		
 		HeapReference(StorageArea area, heapIndex index) : area(area), index(index) { }
 		
-		HeapReference() : HeapReference(StorageArea::undefined, 0) { }
+		HeapReference() : HeapReference(StorageArea::undefined, 0) {
+			// Undefined heap references should only be used as intermediate values, to be assigned to. Using them directly is an error.
+		}
 		
 		bool operator==(const HeapReference& other) {
 			return area == other.area && index == other.index;

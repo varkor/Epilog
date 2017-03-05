@@ -125,7 +125,11 @@ namespace Epilog {
 			std::cout << std::endl;
 		} },
 		{ "print", [] {
-			std::cout << Runtime::currentRuntime->registers[0]->trace();
+			if (Runtime::currentRuntime->registers[0] != nullptr) {
+				std::cout << Runtime::currentRuntime->registers[0]->trace();
+			} else {
+				throw RuntimeException("Tried to print the contents of an unset register.", __FILENAME__, __func__, __LINE__);
+			}
 		} },
 		{ "evaluate", [] {
 			if (dynamic_cast<HeapTuple*>(Runtime::currentRuntime->registers[1].get()) || dynamic_cast<HeapNumber*>(Runtime::currentRuntime->registers[1].get())) {
@@ -153,7 +157,30 @@ namespace Epilog {
 		} }
 	};
 	
+	void initialiseBuiltins(Interpreter::Context& context) {
+		// Set up the built-in functions
+		HeapReference::heapIndex maximumRegisters = 0;
+		for (auto& pair : StandardLibrary::functions) {
+			const std::string& symbol = pair.first;
+			if (DEBUG) {
+				std::cerr << "Register built-in function: " << symbol << std::endl;
+			}
+			Runtime::currentRuntime->labels[symbol] = context.insertionAddress;
+			HeapReference::heapIndex registers = 0;
+			pair.second(context, registers);
+			maximumRegisters = std::max(maximumRegisters, registers);
+		}
+		while (Runtime::currentRuntime->registers.size() < maximumRegisters) {
+			Runtime::currentRuntime->registers.push_back(nullptr);
+		}
+		if (DEBUG) {
+			std::cerr << std::endl;
+		}
+	}
+	
 	namespace AST {
+		int64_t DynamicTerm::dynamicID = 0;
+		
 		struct CompoundTermWrapper: Printable {
 			CompoundTerm* compoundTerm;
 			Modifier* modifier;
@@ -163,18 +190,6 @@ namespace Epilog {
 			std::string toString() const override {
 				return (modifier != nullptr ? *modifier : std::string()) + compoundTerm->toString();
 			}
-		};
-		
-		struct TermNode {
-			Term* term;
-			std::shared_ptr<TermNode> parent;
-			HeapReference reg;
-			std::string name;
-			std::string symbol;
-			int64_t value = 0;
-			std::vector<std::shared_ptr<TermNode>> children;
-			
-			TermNode(Term* term, std::shared_ptr<TermNode> parent) : term(term), parent(parent) { }
 		};
 		
 		void topologicalSort(std::vector<std::shared_ptr<TermNode>>& allocations, std::shared_ptr<TermNode> current) {
@@ -284,6 +299,13 @@ namespace Epilog {
 					node->name = number->toString();
 					node->symbol = node->name;
 					node->value = number->value;
+				} else if (DynamicTerm* dynamicTerm = dynamic_cast<DynamicTerm*>(node->term)) {
+					node->name = dynamicTerm->symbol;
+					node->symbol = node->name;
+					if (dynamicTerm->usesRegister) {
+						allocations[node->symbol] = reg; // The symbol should be unique, we do not have to worry about setting variableNodes.
+						assignedNextRegister = true;
+					}
 				} else {
 					throw CompilationException("Found a term of an unknown type in the query.", __FILENAME__, __func__, __LINE__);
 				}
@@ -440,6 +462,10 @@ namespace Epilog {
 						pushInstruction(context, number(node, allocations));
 						encounters.insert(node->symbol);
 					}
+				} else if (DynamicTerm* dynamicTerm = dynamic_cast<DynamicTerm*>(node->term)) {
+					for (auto& instruction : dynamicTerm->instructions(node, allocations, dependentAllocations, parent->parent == nullptr)) {
+						pushInstruction(context, instruction);
+					}
 				} else {
 					throw CompilationException("Found a term of an unknown type in the query.", __FILENAME__, __func__, __LINE__);
 				}
@@ -464,24 +490,7 @@ namespace Epilog {
 		}
 		
 		void Clauses::interpret(Interpreter::Context& context) {
-			// Set up the built-in functions
-			HeapReference::heapIndex maximumRegisters = 0;
-			for (auto& pair : StandardLibrary::functions) {
-				const std::string& symbol = pair.first;
-				if (DEBUG) {
-					std::cerr << "Register built-in function: " << symbol << std::endl;
-				}
-				Runtime::currentRuntime->labels[symbol] = context.insertionAddress;
-				HeapReference::heapIndex registers = 0;
-				pair.second(context, registers);
-				maximumRegisters = std::max(maximumRegisters, registers);
-			}
-			while (Runtime::currentRuntime->registers.size() < maximumRegisters) {
-				Runtime::currentRuntime->registers.push_back(nullptr);
-			}
-			if (DEBUG) {
-				std::cerr << std::endl;
-			}
+			initialiseBuiltins(context);
 			
 			// Interpret each of the clauses in turn
 			for (auto& clause : clauses) {

@@ -20,7 +20,7 @@ namespace Epilog {
 			BindAST<AST::Rule> rule = EpilogGrammar::get().rule;
 			BindAST<AST::Query> query = EpilogGrammar::get().query;
 			public:
-			const EpilogGrammar& grammar = EpilogGrammar::get();
+			EpilogGrammar& grammar = EpilogGrammar::get();
 		};
 	}
 }

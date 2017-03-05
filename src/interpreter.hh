@@ -25,4 +25,6 @@ namespace Epilog {
 	}
 	
 	Instruction::instructionReference pushInstruction(Interpreter::Context& context, Instruction* instruction);
+	
+	void initialiseBuiltins(Interpreter::Context& context);
 }

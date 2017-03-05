@@ -1,3 +1,5 @@
+#pragma once
+
 #include "Pegmatite/pegmatite.hh"
 
 namespace Epilog {
@@ -91,7 +93,7 @@ namespace Epilog {
 			Rule clauses = *clause;
 			
 			// Singleton getter.
-			static const EpilogGrammar& get() {
+			static EpilogGrammar& get() {
 				static EpilogGrammar grammar;
 				return grammar;
 			}
@@ -99,9 +101,10 @@ namespace Epilog {
 			// Avoid the possibility of accidental copying of the singleton.
 			EpilogGrammar(EpilogGrammar const&) = delete;
 			void operator=(EpilogGrammar const&) = delete;
+			
 			// EpilogGrammar should only be constructed via the getter.
 			protected:
-			EpilogGrammar() {};
+			EpilogGrammar() {}
 		};
 	}
 }
