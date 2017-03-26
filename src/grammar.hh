@@ -47,7 +47,7 @@ namespace Epilog {
 			
 			Rule identifier = simpleIdentifier | ('\'' >> *("\\'" | (!ExprPtr('\'') >> any())) >> '\'');
 			
-			Rule variableIdentifier = pegmatite::term((uppercase | '_') >> *character);
+			Rule variableIdentifier = pegmatite::term(uppercase >> *character) | '_';
 			
 			// Variables.
 			Rule variable = variableIdentifier;

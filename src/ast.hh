@@ -63,7 +63,10 @@ namespace Epilog {
 			bool construct(const pegmatite::InputRange& range, pegmatite::ASTStack& stack, const pegmatite::ErrorReporter& errorReporter) override;
 		};
 		
-		class VariableIdentifier: public pegmatite::ASTString { };
+		class VariableIdentifier: public pegmatite::ASTString {
+			public:
+			bool construct(const pegmatite::InputRange& range, pegmatite::ASTStack& stack, const pegmatite::ErrorReporter& errorReporter) override;
+		};
 		
 		class ParameterList: public pegmatite::ASTContainer {
 			public:
