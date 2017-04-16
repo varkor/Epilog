@@ -96,6 +96,9 @@ namespace Epilog {
 				}
 				return sum;
 			}
+			if (name == "-" && functor->parameters == 2) {
+				return evaluateCompoundTerm(dereference(HeapReference(StorageArea::heap, reference.index + 1))) - evaluateCompoundTerm(dereference(HeapReference(StorageArea::heap, reference.index + 2)));
+			}
 			if (name == "*" && functor->parameters > 1) {
 				int64_t product = 1;
 				for (int64_t i = 0; i < functor->parameters; ++ i) {
@@ -103,7 +106,15 @@ namespace Epilog {
 				}
 				return product;
 			}
-			throw RuntimeException("Tried to evaluate a functor that is not a recognised operation.", __FILENAME__, __func__, __LINE__);
+			if (name == "/" && functor->parameters == 2) {
+				return evaluateCompoundTerm(dereference(HeapReference(StorageArea::heap, reference.index + 1))) / evaluateCompoundTerm(dereference(HeapReference(StorageArea::heap, reference.index + 2)));
+			}
+			if (name == "mod" && functor->parameters == 2) {
+				int64_t x = evaluateCompoundTerm(dereference(HeapReference(StorageArea::heap, reference.index + 1)));
+				int64_t y = evaluateCompoundTerm(dereference(HeapReference(StorageArea::heap, reference.index + 2)));
+				return ((x % y) + y) % y;
+			}
+			throw RuntimeException("Tried to evaluate a functor (" + functor->toString() + ") that is not a recognised operation.", __FILENAME__, __func__, __LINE__);
 		} else if (HeapNumber* number = dynamic_cast<HeapNumber*>(container)) {
 			return number->value;
 		} else {

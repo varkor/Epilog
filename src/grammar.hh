@@ -40,7 +40,7 @@ namespace Epilog {
 			Rule number = pegmatite::term(-"-"_E >> +digit);
 			
 			// Operators: special identifiers for built-ins.
-			Rule oper = "=<"_E | '<' | "=>" | '>' | ".+*="_S;
+			Rule oper = "=<"_E | '<' | "=>" | '>' | ".+-*/="_S;
 			
 			// Identifiers: names (for example, for facts or rules).
 			Rule simpleIdentifier = pegmatite::term(lowercase >> *character) | oper | "[]";
