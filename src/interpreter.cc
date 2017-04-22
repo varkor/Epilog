@@ -137,7 +137,7 @@ namespace Epilog {
 		} },
 		{ "print", [] {
 			if (Runtime::currentRuntime->registers[0] != nullptr) {
-				std::cout << Runtime::currentRuntime->registers[0]->trace();
+				std::cout << Runtime::currentRuntime->registers[0]->trace() << std::flush;
 			} else {
 				throw RuntimeException("Tried to print the contents of an unset register.", __FILENAME__, __func__, __LINE__);
 			}
