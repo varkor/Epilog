@@ -58,7 +58,7 @@ namespace Epilog {
 			Rule list = '['_E >> elements >> -('|' >> term) >> ']';
 			
 			// Terms.
-			Rule term = compoundTerm | variable | number | list;
+			Rule term = number | compoundTerm | variable | list | string;
 			
 			// Parameters: a comma-separated list of terms.
 			Rule parameter = term;
