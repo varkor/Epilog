@@ -11,6 +11,8 @@ namespace Epilog {
 			BindAST<AST::Number> number = EpilogGrammar::get().number;
 			BindAST<AST::List> list = EpilogGrammar::get().list;
 			BindAST<AST::ElementList> elementList = EpilogGrammar::get().elements;
+			BindAST<AST::String> string = EpilogGrammar::get().string;
+			BindAST<AST::StringContent> stringContent = EpilogGrammar::get().content;
 			BindAST<AST::CompoundTerm> compoundTerm = EpilogGrammar::get().compoundTerm;
 			BindAST<AST::EnrichedCompoundTerm> enrichedCompoundTerm = EpilogGrammar::get().enrichedCompoundTerm;
 			BindAST<AST::Modifier> modifier = EpilogGrammar::get().modifier;

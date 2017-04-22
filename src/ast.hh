@@ -153,6 +153,18 @@ namespace Epilog {
 			}
 		};
 		
+		// String literal.
+		class StringContent: public pegmatite::ASTString { };
+		
+		class String: public Term {
+			public:
+			pegmatite::ASTChild<StringContent> text;
+			
+			std::string toString() const override {
+				return "<temporary string literal>";
+			}
+		};
+		
 		// Number literal.
 		class Number: public Term {
 			public:

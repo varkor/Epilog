@@ -340,11 +340,15 @@ namespace Epilog {
 			Runtime::currentRuntime->registers.print();
 		}
 		
+		std::unique_ptr<CompoundTerm> createAtomWithName(std::string name) {
+			std::unique_ptr<CompoundTerm> atom(new CompoundTerm());
+			atom->name.std::string::operator=(name);
+			atom->parameterList.reset(new ParameterList());
+			return atom;
+		}
+		
 		std::unique_ptr<CompoundTerm> createListWrapper(bool empty = false) {
-			std::unique_ptr<CompoundTerm> wrapper(new CompoundTerm());
-			wrapper->name.std::string::operator=(!empty ? "." : "[]"); // Special symbols for lists.
-			wrapper->parameterList.reset(new ParameterList());
-			return wrapper;
+			return createAtomWithName(!empty ? "." : "[]"); // Special symbols for lists.
 		}
 		
 		std::unique_ptr<Term> removeSyntacticSugar(Term* clause) {
@@ -361,6 +365,30 @@ namespace Epilog {
 				if (CompoundTerm* compoundTerm = dynamic_cast<CompoundTerm*>(term)) {
 					for (auto it = compoundTerm->parameterList->parameters.begin(); it != compoundTerm->parameterList->parameters.end(); ++ it) {
 						terms.push(std::make_pair(it->get(), it));
+					}
+				} else if (String* string = dynamic_cast<String*>(term)) {
+					// String literals are replaced with equivalent list terms before any analysis is done.
+					pegmatite::ASTList<Term>::iterator& it = pair.second;
+					std::unique_ptr<CompoundTerm> expansion = createListWrapper(string->text.length() == 0);
+					if (string->text.length() > 0) {
+						CompoundTerm* current = nullptr;
+						for (char& character : string->text) {
+							if (current != nullptr) {
+								auto wrapper = createListWrapper();
+								CompoundTerm* next = wrapper.get();
+								current->parameterList->parameters.push_back(std::move(wrapper));
+								current = next;
+							} else {
+								current = expansion.get();
+							}
+							current->parameterList->parameters.push_back(createAtomWithName(std::string(1, character)));
+						}
+						current->parameterList->parameters.push_back(createListWrapper(true));
+					}
+					if (it != nullList.end()) {
+						*it = std::move(expansion);
+					} else {
+						replacement = std::move(expansion);
 					}
 				} else if (List* list = dynamic_cast<List*>(term)) {
 					// List literals are replaced with equivalent compound terms before any analysis is done.

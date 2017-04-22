@@ -57,6 +57,11 @@ namespace Epilog {
 			
 			Rule list = '['_E >> elements >> -('|' >> term) >> ']';
 			
+			// String literals.
+			Rule content = *("\\\"" | (!ExprPtr('"') >> any()));
+			
+			Rule string = '"'_E >> content >> '"';
+			
 			// Terms.
 			Rule term = number | compoundTerm | variable | list | string;
 			
